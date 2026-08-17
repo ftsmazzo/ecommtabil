@@ -1,4 +1,44 @@
-<?php $this->layout("app/template/base"); ?>
+<?php
+$this->layout("app/template/base");
+
+$layoutAtual     = $layout ?? "colunar";
+$qtdSalvos       = count(array_filter((array) ($mapeamentoSalvo ?? [])));
+$periodosMarcados = array_map("intval", (array) ($periodosMatriz ?? []));
+$campos          = (array) ($campos ?? []);
+$colunas         = (array) ($colunas ?? []);
+$origem          = $origemMapeamento ?? "vazio";
+$anoBase         = (int) ($anoBase ?? date("Y"));
+if ($anoBase < 1990 || $anoBase > 2100) {
+    $anoBase = (int) date("Y");
+}
+
+$layouts = [
+    "colunar" => [
+        "titulo" => "Uma coluna por conta",
+        "desc"   => "Cada conta do plano tem o valor em uma coluna. Serve para estatística e DRE de vendas.",
+    ],
+    "ledger" => [
+        "titulo" => "Uma conta por linha",
+        "desc"   => "A planilha tem colunas de período, conta e valor. Serve para despesas e lançamentos.",
+    ],
+    "matriz" => [
+        "titulo" => "Conta nas linhas, períodos nas colunas",
+        "desc"   => "Como um DRE anual: a primeira coluna é a conta e cada coluna seguinte é um ano ou mês.",
+    ],
+];
+
+$renderSelect = function (string $destino, bool $obrigatorio = false) use ($colunas, $campos): void {
+    $atual = array_key_exists($destino, $campos) ? (string) (int) $campos[$destino] : "";
+    $req   = $obrigatorio ? " data-obrigatorio=\"1\"" : "";
+    echo '<select name="campos[' . htmlspecialchars($destino, ENT_QUOTES, "UTF-8") . ']" class="form-select form-select-sm map-select js-col"' . $req . '>';
+    echo '<option value="">— Selecione a coluna —</option>';
+    foreach ($colunas as $i => $col) {
+        $sel = ($atual !== "" && (int) $atual === (int) $i) ? " selected" : "";
+        echo '<option value="' . (int) $i . '"' . $sel . '>' . htmlspecialchars((string) $col["label"], ENT_QUOTES, "UTF-8") . "</option>";
+    }
+    echo "</select>";
+};
+?>
 
 <?php $this->start("page-actions") ?>
     <a href="<?=$router->route("admin.projeto.importacao", ["id" => $projeto->id, "tipo" => $upload->tipo])?>"
@@ -9,12 +49,16 @@
 
 <?php $this->start("styles") ?>
 <style>
-    .map-col-header { font-weight: 600; font-size: .82rem; color: #495057; }
-    .map-col-preview { font-size: .75rem; color: #adb5bd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+    .map-select { min-width: 240px; max-width: 420px; }
     .offcanvas-preview table { font-size: .78rem; }
     .offcanvas-preview th { background: #1e3a5f; color: #fff; font-weight: 600; white-space: nowrap; }
     .offcanvas-preview td { white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
-    .map-select { min-width: 200px; }
+    .layout-card { cursor: pointer; border: 1px solid #dee2e6; border-radius: .5rem; padding: .85rem 1rem; height: 100%; }
+    .layout-card:has(input:checked) { border-color: #0d6efd; background: #f5f9ff; }
+    .layout-card input { accent-color: #0d6efd; }
+    .campo-label { font-weight: 600; font-size: .85rem; }
+    .campo-hint { font-size: .75rem; color: #6c757d; }
+    tr.map-preenchida { background: rgba(25, 135, 84, .06); }
 </style>
 <?php $this->end() ?>
 
@@ -60,106 +104,223 @@
     <?php endif ?>
 </div>
 
-<?php if (count(array_filter($mapeamentoSalvo)) === 0) : ?>
 <?php if (isset($lancamentosExistentes) && (int) ($lancamentosExistentes->total_lancamentos ?? 0) > 0) : ?>
 <div class="alert alert-warning py-2 mb-3">
     <i class="uil uil-exclamation-triangle me-1"></i>
     Já existem <strong><?=(int) $lancamentosExistentes->total_lancamentos?></strong> lançamento(s) importados para <?=strtoupper($upload->tipo ?? "")?>.
-    Processar novamente irá <strong>substituir</strong> todos os dados existentes.
+    Processar novamente irá <strong>substituir</strong> os dados desta aba.
 </div>
 <?php endif ?>
 
-<!-- Card: Sugerir mapeamento via IA -->
-<div class="card mb-3 border-primary-subtle" id="card-ia">
-    <div class="card-body d-flex align-items-start gap-3">
-        <div style="font-size:2rem;color:#6f42c1;line-height:1;flex-shrink:0">
-            <i class="ti ti-sparkles"></i>
-        </div>
-        <div class="flex-grow-1">
-            <div class="fw-semibold mb-1">Sugerir mapeamento via IA</div>
-            <div class="text-muted small mb-2">
-                A IA vai analisar os nomes das colunas e sugerir a melhor opção para o mapeamento.
+<?php if ($origem === "sugerido") : ?>
+<div class="alert alert-info py-2 mb-3">
+    <i class="uil uil-magic-wand me-1"></i>
+    O formato e algumas colunas foram detectados automaticamente. Confira e <strong>salve o mapeamento</strong> antes de processar.
+    <?php if (($layoutDetectado ?? "") === $layoutAtual) : ?>
+        Formato sugerido: <strong><?=htmlspecialchars($layouts[$layoutAtual]["titulo"] ?? $layoutAtual, ENT_QUOTES, "UTF-8")?></strong>.
+    <?php endif ?>
+</div>
+<?php endif ?>
+
+<form id="form-mapeamento" action="<?=$router->route("admin.projeto.importacao.mapear.salvar", ["id" => $projeto->id])?>" method="POST">
+    <input type="hidden" name="csrf" value="<?=$csrf?>">
+    <input type="hidden" name="aba" value="<?=(int) $abaAtiva?>">
+    <?php foreach ($headers as $i => $h) : ?>
+        <input type="hidden" name="headers[<?=(int) $i?>]" value="<?=htmlspecialchars((string) $h, ENT_QUOTES, "UTF-8")?>">
+    <?php endforeach ?>
+
+    <div class="card mb-3">
+        <div class="card-header fw-semibold">Como esta planilha está organizada?</div>
+        <div class="card-body">
+            <div class="row g-3">
+                <?php foreach ($layouts as $slug => $info) : ?>
+                <div class="col-12 col-lg-4">
+                    <label class="layout-card d-block mb-0">
+                        <div class="d-flex align-items-start gap-2">
+                            <input type="radio" name="layout" value="<?=$slug?>" class="mt-1" <?=$layoutAtual === $slug ? "checked" : ""?>>
+                            <div>
+                                <div class="fw-semibold"><?=htmlspecialchars($info["titulo"], ENT_QUOTES, "UTF-8")?></div>
+                                <div class="text-muted small"><?=htmlspecialchars($info["desc"], ENT_QUOTES, "UTF-8")?></div>
+                            </div>
+                        </div>
+                    </label>
+                </div>
+                <?php endforeach ?>
             </div>
-            <button type="button" id="btn-ia-sugerir" class="btn btn-sm btn-purple">
-                <i class="ti ti-sparkles me-1"></i>Sugerir mapeamento
-            </button>
-            <span id="ia-feedback" class="ms-2 small d-none"></span>
         </div>
     </div>
-</div>
-<?php endif ?>
 
-<!-- Tabela de mapeamento -->
-<div class="card">
-    <div class="card-header d-flex align-items-center justify-content-between">
-        <span class="fw-semibold">Mapeamento de Colunas</span>
-        <span class="text-muted small"><?=count($headers)?> colunas encontradas</span>
+    <div class="card mb-3 border-primary-subtle" id="card-ia">
+        <div class="card-body d-flex align-items-start gap-3">
+            <div style="font-size:2rem;color:#6f42c1;line-height:1;flex-shrink:0">
+                <i class="ti ti-sparkles"></i>
+            </div>
+            <div class="flex-grow-1">
+                <div class="fw-semibold mb-1">Sugerir mapeamento via IA</div>
+                <div class="text-muted small mb-2">
+                    A IA escolhe, para cada campo do sistema, qual coluna da planilha usar. Você revisa e salva.
+                </div>
+                <button type="button" id="btn-ia-sugerir" class="btn btn-sm btn-purple">
+                    <i class="ti ti-sparkles me-1"></i>Sugerir mapeamento
+                </button>
+                <span id="ia-feedback" class="ms-2 small d-none"></span>
+            </div>
+        </div>
     </div>
-    <div class="card-body p-0">
-        <form id="form-mapeamento" action="<?=$router->route("admin.projeto.importacao.mapear.salvar", ["id" => $projeto->id])?>" method="POST">
-            <input type="hidden" name="csrf" value="<?=$csrf?>">
-            <input type="hidden" name="aba" value="<?=$abaAtiva?>">
-            <?php foreach ($headers as $i => $h) : ?>
-                <input type="hidden" name="headers[<?=$i?>]" value="<?=htmlspecialchars($h, ENT_QUOTES, "UTF-8")?>">
-            <?php endforeach ?>
-            <div class="table-responsive">
-                <table class="table table-sm mb-0 align-middle">
-                    <thead class="table-light">
-                        <tr>
-                            <th style="width:40px" class="text-center text-muted">#</th>
-                            <th>Coluna da Planilha</th>
-                            <th>Exemplos</th>
-                            <th style="min-width:240px">Mapear para</th>
+
+    <!-- Colunar -->
+    <div class="card mb-3<?=$layoutAtual !== "colunar" ? " d-none" : ""?>" data-layout-panel="colunar">
+        <div class="card-header d-flex align-items-center justify-content-between gap-3 flex-wrap">
+            <span class="fw-semibold">Campos do modelo → coluna da planilha</span>
+            <div class="d-flex align-items-center gap-2">
+                <input type="search" id="filtro-contas" class="form-control form-control-sm" style="width:220px"
+                       placeholder="Filtrar conta..." autocomplete="off">
+                <span class="text-muted small"><?=count($headers)?> colunas na aba</span>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Campo do sistema</th>
+                        <th style="min-width:280px">Coluna da planilha</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>
+                            <div class="campo-label">Período / Competência</div>
+                            <div class="campo-hint">Data, mês ou ano de cada linha</div>
+                        </td>
+                        <td><?php $renderSelect("__periodo__"); ?></td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div class="campo-label">Descrição / Histórico <span class="text-muted fw-normal">(opcional)</span></div>
+                        </td>
+                        <td><?php $renderSelect("__descricao__"); ?></td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div class="campo-label">Unidade / Centro de custo <span class="text-muted fw-normal">(opcional)</span></div>
+                        </td>
+                        <td><?php $renderSelect("__unidade__"); ?></td>
+                    </tr>
+                    <?php foreach ($contas as $raiz => $contasDoGrupo) : ?>
+                        <tr class="table-light">
+                            <td colspan="2" class="fw-semibold small text-muted py-2">
+                                <?=htmlspecialchars((string) $raiz, ENT_QUOTES, "UTF-8")?> — Plano de contas (<?=strtoupper($upload->tipo)?>)
+                            </td>
                         </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($headers as $i => $header) : ?>
-                        <?php $valorSalvo = $mapeamentoSalvo[$i] ?? ""; ?>
-                        <tr <?=$valorSalvo ? 'class="table-success bg-opacity-50"' : ""?>>
-                            <td class="text-center text-muted small"><?=\PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1)?></td>
-                            <td class="map-col-header">
-                                <?=htmlspecialchars($header, ENT_QUOTES, "UTF-8")?>
-                                <?php if ($valorSalvo) : ?>
-                                    <span class="badge bg-success-subtle text-success ms-1" style="font-size:.65rem">salvo</span>
-                                <?php endif ?>
-                            </td>
-                            <td class="map-col-preview text-muted">
-                                <?php if (!empty($previews[$i])) : ?>
-                                    <?=htmlspecialchars(implode("  ·  ", array_slice($previews[$i], 0, 3)), ENT_QUOTES, "UTF-8")?>
-                                <?php else : ?>
-                                    <span class="fst-italic">vazio</span>
-                                <?php endif ?>
-                            </td>
+                        <?php foreach ($contasDoGrupo as $conta) : ?>
+                        <?php $busca = mb_strtolower($conta->codigo . " " . $conta->nome, "UTF-8"); ?>
+                        <tr class="js-conta-row" data-busca="<?=htmlspecialchars($busca, ENT_QUOTES, "UTF-8")?>">
                             <td>
-                                <select name="mapeamento[<?=$i?>]" class="form-select form-select-sm map-select">
-                                    <option value="">— Não mapear —</option>
-                                    <optgroup label="Campos especiais">
-                                        <option value="__periodo__"   <?=$valorSalvo === "__periodo__"   ? "selected" : ""?>>Período / Competência</option>
-                                        <option value="__descricao__" <?=$valorSalvo === "__descricao__" ? "selected" : ""?>>Descrição / Histórico</option>
-                                        <option value="__valor__"     <?=$valorSalvo === "__valor__"     ? "selected" : ""?>>Valor</option>
-                                        <option value="__unidade__"   <?=$valorSalvo === "__unidade__"   ? "selected" : ""?>>Unidade / Centro de Custo</option>
-                                    </optgroup>
-                                    <?php foreach ($contas as $raiz => $contasDoGrupo) : ?>
-                                    <optgroup label="<?=htmlspecialchars($raiz, ENT_QUOTES, "UTF-8")?> — Plano de Contas (<?=strtoupper($upload->tipo)?>)">
-                                        <?php foreach ($contasDoGrupo as $conta) : ?>
-                                            <option value="conta_<?=$conta->id?>" <?=$valorSalvo === "conta_{$conta->id}" ? "selected" : ""?>>
-                                                <?=htmlspecialchars($conta->codigo . " — " . $conta->nome, ENT_QUOTES, "UTF-8")?>
-                                            </option>
-                                        <?php endforeach ?>
-                                    </optgroup>
-                                    <?php endforeach ?>
-                                </select>
+                                <div class="campo-label"><?=htmlspecialchars($conta->codigo . " — " . $conta->nome, ENT_QUOTES, "UTF-8")?></div>
                             </td>
+                            <td><?php $renderSelect("conta_" . $conta->id); ?></td>
                         </tr>
                         <?php endforeach ?>
-                    </tbody>
-                </table>
-            </div>
-        </form>
+                    <?php endforeach ?>
+                </tbody>
+            </table>
+        </div>
     </div>
+
+    <!-- Ledger -->
+    <div class="card mb-3<?=$layoutAtual !== "ledger" ? " d-none" : ""?>" data-layout-panel="ledger">
+        <div class="card-header fw-semibold">De-para por lançamento</div>
+        <div class="table-responsive">
+            <table class="table table-sm mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Campo do sistema</th>
+                        <th style="min-width:280px">Coluna da planilha</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>
+                            <div class="campo-label">Período / Competência</div>
+                            <div class="campo-hint">Pode ficar vazio se o período não vier na planilha</div>
+                        </td>
+                        <td><?php $renderSelect("__periodo__"); ?></td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div class="campo-label">Conta <span class="text-danger">*</span></div>
+                            <div class="campo-hint">Nome ou código. Precisa existir no plano analítico</div>
+                        </td>
+                        <td><?php $renderSelect("__conta__", true); ?></td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div class="campo-label">Valor <span class="text-danger">*</span></div>
+                        </td>
+                        <td><?php $renderSelect("__valor__", true); ?></td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div class="campo-label">Descrição / Histórico <span class="text-muted fw-normal">(opcional)</span></div>
+                        </td>
+                        <td><?php $renderSelect("__descricao__"); ?></td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div class="campo-label">Unidade / Centro de custo <span class="text-muted fw-normal">(opcional)</span></div>
+                        </td>
+                        <td><?php $renderSelect("__unidade__"); ?></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Matriz -->
+    <div class="card mb-3<?=$layoutAtual !== "matriz" ? " d-none" : ""?>" data-layout-panel="matriz">
+        <div class="card-header fw-semibold">De-para em matriz</div>
+        <div class="card-body border-bottom">
+            <label class="campo-label mb-1 d-block">Coluna com o nome ou código da conta <span class="text-danger">*</span></label>
+            <?php $renderSelect("__conta__", true); ?>
+            <div class="mt-3" style="max-width:220px">
+                <label class="campo-label mb-1 d-block">Ano do primeiro período sem data</label>
+                <input type="number" name="ano_base" class="form-control form-control-sm" min="1990" max="2100" value="<?=(int) $anoBase?>">
+                <div class="campo-hint mt-1">Para cabeçalhos tipo “Ano 1” / “Ano 2”. Colunas já com 2024 continuam 2024.</div>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:48px" class="text-center">Usar</th>
+                        <th>Coluna de período / valor</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($colunas as $i => $col) : ?>
+                    <tr>
+                        <td class="text-center">
+                            <input type="checkbox" class="form-check-input js-matriz" name="periodos_matriz[]" value="<?=(int) $i?>"
+                                <?=in_array((int) $i, $periodosMarcados, true) ? "checked" : ""?>>
+                        </td>
+                        <td>
+                            <span class="fw-semibold me-1"><?=htmlspecialchars((string) $col["letra"], ENT_QUOTES, "UTF-8")?></span>
+                            <?=htmlspecialchars((string) $col["header"], ENT_QUOTES, "UTF-8")?>
+                            <?php if (!empty($col["preview"])) : ?>
+                                <div class="campo-hint"><?=htmlspecialchars((string) $col["preview"], ENT_QUOTES, "UTF-8")?></div>
+                            <?php endif ?>
+                        </td>
+                    </tr>
+                    <?php endforeach ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</form>
+
+<div class="card">
     <div class="card-footer d-flex justify-content-between align-items-center">
-        <span class="text-muted small">
-            <?php $qtdSalvos = count(array_filter($mapeamentoSalvo)); ?>
+        <span class="text-muted small" id="map-resumo">
             <?php if ($qtdSalvos > 0) : ?>
                 <i class="uil uil-check-circle text-success me-1"></i><?=$qtdSalvos?> coluna<?=$qtdSalvos > 1 ? "s" : ""?> mapeada<?=$qtdSalvos > 1 ? "s" : ""?>
             <?php endif ?>
@@ -168,15 +329,18 @@
             <a href="<?=$router->route("admin.projeto.importacao", ["id" => $projeto->id, "tipo" => $upload->tipo])?>"
                class="btn btn-outline-secondary">Cancelar</a>
             <button type="submit" form="form-mapeamento" class="btn btn-primary">
-                <i class="uil uil-check me-1"></i>Salvar Mapeamento
+                <i class="uil uil-check me-1"></i>Salvar mapeamento
             </button>
             <?php if ($qtdSalvos > 0) : ?>
+            <button type="button" class="btn btn-outline-success" id="btn-simular">
+                <i class="uil uil-eye me-1"></i>Conferir o que entra
+            </button>
             <form action="<?=$router->route("admin.projeto.importacao.processar", ["id" => $projeto->id])?>"
                   method="POST" style="display:inline" id="form-processar">
                 <input type="hidden" name="csrf" value="<?=$csrf?>">
-                <input type="hidden" name="aba" value="<?=$abaAtiva?>">
+                <input type="hidden" name="aba" value="<?=(int) $abaAtiva?>">
                 <button type="submit" class="btn btn-success" id="btn-processar">
-                    <span class="btn-text"><i class="uil uil-process me-1"></i>Processar Dados</span>
+                    <span class="btn-text"><i class="uil uil-process me-1"></i>Processar dados</span>
                     <span class="btn-loading d-none"><span class="spinner-border spinner-border-sm me-2"></span>Processando...</span>
                 </button>
             </form>
@@ -206,26 +370,136 @@
     </div>
 </div>
 
+<div class="modal fade" id="modal-simular" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">O que entra nesta importação</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <div id="simular-loading" class="text-muted py-4 text-center">
+                    <span class="spinner-border spinner-border-sm me-2"></span>Simulando…
+                </div>
+                <div id="simular-erro" class="alert alert-danger d-none mb-0"></div>
+                <div id="simular-ok" class="d-none">
+                    <p class="mb-2" id="simular-resumo"></p>
+                    <div id="simular-avisos"></div>
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Linha</th>
+                                    <th>Conta</th>
+                                    <th>Período</th>
+                                    <th class="text-end">Valor</th>
+                                </tr>
+                            </thead>
+                            <tbody id="simular-tbody"></tbody>
+                        </table>
+                    </div>
+                    <p class="text-muted small mt-2 mb-0">Amostra das primeiras linhas. Nada foi gravado ainda.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <?php $this->start("endScripts") ?>
 <script>
 (function () {
-    var uploadId    = <?=(int) $projeto->id?>;
-    var abaAtiva    = <?=(int) $abaAtiva?>;
-    var previewUrl  = <?=json_encode($router->route("admin.projeto.importacao.mapear.preview", ["id" => $projeto->id]))?>;
+    var abaAtiva = <?=(int) $abaAtiva?>;
+    var previewUrl = <?=json_encode($router->route("admin.projeto.importacao.mapear.preview", ["id" => $projeto->id]))?>;
     var mapeamentoUrl = <?=json_encode($router->route("admin.projeto.importacao.mapear", ["id" => $projeto->id]))?>;
+    var sugerirUrl = <?=json_encode($router->route("admin.projeto.importacao.mapear.sugerir", ["id" => $projeto->id]))?>;
+    var simularUrl = <?=json_encode($router->route("admin.projeto.importacao.mapear.simular", ["id" => $projeto->id]))?>;
     var previewLoaded = {};
+    var form = document.getElementById("form-mapeamento");
+
+    function layoutAtual() {
+        var el = document.querySelector('input[name="layout"]:checked');
+        return el ? el.value : "colunar";
+    }
+
+    function painelAtivo() {
+        return document.querySelector('[data-layout-panel="' + layoutAtual() + '"]');
+    }
+
+    function atualizarPainel() {
+        var layout = layoutAtual();
+        document.querySelectorAll("[data-layout-panel]").forEach(function (panel) {
+            panel.classList.toggle("d-none", panel.getAttribute("data-layout-panel") !== layout);
+        });
+        destacarLinhas();
+    }
+
+    function selectsDoPainel() {
+        var painel = painelAtivo();
+        return painel ? Array.from(painel.querySelectorAll("select.js-col")) : [];
+    }
+
+    function destacarLinhas() {
+        selectsDoPainel().forEach(function (sel) {
+            var tr = sel.closest("tr");
+            if (tr) tr.classList.toggle("map-preenchida", !!sel.value);
+        });
+    }
+
+    function enforceUnique(origem) {
+        var val = origem.value;
+        if (!val) {
+            destacarLinhas();
+            return;
+        }
+        selectsDoPainel().forEach(function (sel) {
+            if (sel !== origem && sel.value === val) sel.value = "";
+        });
+        var painel = painelAtivo();
+        if (painel) {
+            painel.querySelectorAll("input.js-matriz").forEach(function (cb) {
+                if (cb.value === val) cb.checked = false;
+            });
+        }
+        destacarLinhas();
+    }
+
+    form.addEventListener("change", function (ev) {
+        if (ev.target && ev.target.classList.contains("js-col")) {
+            enforceUnique(ev.target);
+        }
+        if (ev.target && ev.target.classList.contains("js-matriz") && ev.target.checked) {
+            selectsDoPainel().forEach(function (sel) {
+                if (sel.value === ev.target.value) sel.value = "";
+            });
+            destacarLinhas();
+        }
+    });
+
+    document.querySelectorAll('input[name="layout"]').forEach(function (radio) {
+        radio.addEventListener("change", atualizarPainel);
+    });
+
+    form.addEventListener("submit", function () {
+        document.querySelectorAll("[data-layout-panel]").forEach(function (panel) {
+            var ativo = !panel.classList.contains("d-none");
+            panel.querySelectorAll("select, input").forEach(function (el) {
+                el.disabled = !ativo;
+            });
+        });
+    });
+
+    atualizarPainel();
 
     function loadPreview(abaIdx) {
         if (previewLoaded[abaIdx]) return;
-
         document.getElementById("preview-loading").classList.remove("d-none");
         document.getElementById("preview-table-wrap").classList.add("d-none");
         document.getElementById("preview-error").classList.add("d-none");
 
         fetch(previewUrl, {
-            method:  "POST",
+            method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body:    "csrf=<?=$csrf?>&aba=" + abaIdx,
+            body: "csrf=<?=$csrf?>&aba=" + abaIdx,
         })
         .then(function (r) { return r.json(); })
         .then(function (data) {
@@ -235,7 +509,7 @@
                 document.getElementById("preview-error").classList.remove("d-none");
                 return;
             }
-            var tbl  = document.getElementById("preview-table");
+            var tbl = document.getElementById("preview-table");
             tbl.innerHTML = "";
             data.rows.forEach(function (row, ri) {
                 var tr = document.createElement("tr");
@@ -257,21 +531,17 @@
         });
     }
 
-    // Carrega preview quando offcanvas abre
     document.getElementById("offcanvas-preview").addEventListener("show.bs.offcanvas", function () {
         loadPreview(abaAtiva);
     });
 
-    // Troca de aba — recarrega headers e preview
     var selAba = document.getElementById("sel-aba");
     if (selAba) {
         selAba.addEventListener("change", function () {
-            abaAtiva = parseInt(this.value);
-            window.location = mapeamentoUrl + "?aba=" + abaAtiva;
+            window.location = mapeamentoUrl + "?aba=" + parseInt(this.value, 10);
         });
     }
 
-    // Processar dados — loading
     var btnProc = document.getElementById("btn-processar");
     if (btnProc) {
         btnProc.closest("form").addEventListener("submit", function () {
@@ -281,19 +551,15 @@
         });
     }
 
-    // Sugerir mapeamento via IA
     var btnIa = document.getElementById("btn-ia-sugerir");
     if (btnIa) {
-        var sugerirUrl = <?=json_encode($router->route("admin.projeto.importacao.mapear.sugerir", ["id" => $projeto->id]))?>;
-
         btnIa.addEventListener("click", function () {
             var feedback = document.getElementById("ia-feedback");
             btnIa.disabled = true;
             btnIa.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Analisando...';
             feedback.className = "ms-2 small d-none";
 
-            // Coleta os headers dos inputs hidden
-            var body = "csrf=<?=$csrf?>&aba=" + abaAtiva;
+            var body = "csrf=<?=$csrf?>&aba=" + abaAtiva + "&layout=" + encodeURIComponent(layoutAtual());
             document.querySelectorAll("input[name^='headers[']").forEach(function (inp) {
                 body += "&" + encodeURIComponent(inp.name) + "=" + encodeURIComponent(inp.value);
             });
@@ -314,25 +580,34 @@
                     return;
                 }
 
-                var aplicados = 0;
-                Object.keys(data.sugestoes).forEach(function (idx) {
-                    var val = data.sugestoes[idx];
-                    if (!val) return;
-                    var sel = document.querySelector("select[name='mapeamento[" + idx + "]']");
-                    if (sel) {
-                        // Verifica se a opção existe no select antes de aplicar
-                        var exists = Array.from(sel.options).some(function (o) { return o.value === val; });
-                        if (exists) {
-                            sel.value = val;
-                            // Destaca a linha visualmente
-                            var tr = sel.closest("tr");
-                            if (tr && !tr.classList.contains("table-success")) {
-                                tr.classList.add("table-warning", "bg-opacity-50");
-                            }
-                            aplicados++;
-                        }
+                if (data.layout) {
+                    var radio = document.querySelector('input[name="layout"][value="' + data.layout + '"]');
+                    if (radio) {
+                        radio.checked = true;
+                        atualizarPainel();
                     }
+                }
+
+                var painel = painelAtivo();
+                var aplicados = 0;
+                var campos = data.campos || {};
+                Object.keys(campos).forEach(function (dest) {
+                    var sel = painel.querySelector('select[name="campos[' + dest + ']"]');
+                    if (!sel) return;
+                    sel.value = String(campos[dest]);
+                    if (sel.value !== "") aplicados++;
                 });
+
+                var periodos = (data.periodos_matriz || []).map(function (n) { return String(n); });
+                if (painel) {
+                    painel.querySelectorAll("input.js-matriz").forEach(function (cb) {
+                        var on = periodos.indexOf(String(cb.value)) !== -1;
+                        if (on && !cb.checked) aplicados++;
+                        cb.checked = on;
+                    });
+                }
+
+                destacarLinhas();
 
                 if (aplicados > 0) {
                     feedback.textContent = aplicados + " sugestão(ões) aplicada(s). Revise e salve.";
@@ -347,6 +622,75 @@
                 btnIa.innerHTML = '<i class="ti ti-sparkles me-1"></i>Sugerir mapeamento';
                 document.getElementById("ia-feedback").textContent = "Erro de conexão.";
                 document.getElementById("ia-feedback").className = "ms-2 small text-danger";
+            });
+        });
+    }
+
+    var filtro = document.getElementById("filtro-contas");
+    if (filtro) {
+        filtro.addEventListener("input", function () {
+            var q = (filtro.value || "").toLowerCase().trim();
+            document.querySelectorAll(".js-conta-row").forEach(function (tr) {
+                var busca = tr.getAttribute("data-busca") || "";
+                tr.classList.toggle("d-none", q !== "" && busca.indexOf(q) === -1);
+            });
+        });
+    }
+
+    var btnSimular = document.getElementById("btn-simular");
+    if (btnSimular) {
+        btnSimular.addEventListener("click", function () {
+            var modalEl = document.getElementById("modal-simular");
+            var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            document.getElementById("simular-loading").classList.remove("d-none");
+            document.getElementById("simular-erro").classList.add("d-none");
+            document.getElementById("simular-ok").classList.add("d-none");
+            modal.show();
+
+            fetch(simularUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: "csrf=<?=$csrf?>&aba=" + abaAtiva,
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                document.getElementById("simular-loading").classList.add("d-none");
+                if (!data.ok) {
+                    document.getElementById("simular-erro").textContent = data.error || "Falha na simulação.";
+                    document.getElementById("simular-erro").classList.remove("d-none");
+                    return;
+                }
+                document.getElementById("simular-resumo").textContent =
+                    data.inseridos + " lançamento(s) seriam gerados · " +
+                    data.ignorados + " linha(s) ignorada(s) · " +
+                    (data.contas_nao_achadas ? data.contas_nao_achadas.length : 0) + " conta(s) sem match.";
+
+                var avisos = document.getElementById("simular-avisos");
+                avisos.innerHTML = "";
+                (data.avisos || []).forEach(function (aviso) {
+                    var d = document.createElement("div");
+                    d.className = "alert alert-warning py-2 small";
+                    d.textContent = aviso;
+                    avisos.appendChild(d);
+                });
+
+                var tb = document.getElementById("simular-tbody");
+                tb.innerHTML = "";
+                (data.amostras || []).forEach(function (a) {
+                    var tr = document.createElement("tr");
+                    var valor = Number(a.valor || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    tr.innerHTML = "<td>" + a.linha + "</td><td></td><td></td><td class=\"text-end\"></td>";
+                    tr.cells[1].textContent = a.conta || "";
+                    tr.cells[2].textContent = a.periodo || "—";
+                    tr.cells[3].textContent = valor;
+                    tb.appendChild(tr);
+                });
+                document.getElementById("simular-ok").classList.remove("d-none");
+            })
+            .catch(function () {
+                document.getElementById("simular-loading").classList.add("d-none");
+                document.getElementById("simular-erro").textContent = "Erro de conexão.";
+                document.getElementById("simular-erro").classList.remove("d-none");
             });
         });
     }

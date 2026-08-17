@@ -15,8 +15,7 @@ use App\Models\Projeto;
 use App\Models\ProjetoLancamento;
 use App\Models\ProjetoMapeamentoColuna;
 use App\Models\UsuarioProjetoRecente;
-use PhpOffice\PhpSpreadsheet\IOFactory;
-use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
+use App\Services\Importacao\PlanilhaImportacaoService;
 use App\Services\MenuService;
 
 class ProjetoController extends ControllerAdmin
@@ -390,56 +389,43 @@ class ProjetoController extends ControllerAdmin
         }
 
         try {
-            $reader      = IOFactory::createReaderForFile($caminho);
-            $spreadsheet = $reader->load($caminho);
-            $sheetNames  = $spreadsheet->getSheetNames();
+            $svc        = new PlanilhaImportacaoService();
+            $aberto     = $svc->abrir($caminho);
+            $sheetNames = $aberto["sheetNames"];
 
-            // Aba ativa: querystring ou primeira da lista
             $abaAtiva = (int) ($data->aba ?? 0);
-            if ($abaAtiva < 0 || $abaAtiva >= count($sheetNames)) $abaAtiva = 0;
-
-            $sheet   = $spreadsheet->getSheet($abaAtiva);
-            $maxCol  = $sheet->getHighestDataColumn();
-            $maxColN = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($maxCol);
-
-            $headers  = [];
-            $previews = [];
-
-            for ($c = 1; $c <= $maxColN; $c++) {
-                $letra  = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($c);
-                $header = trim(html_entity_decode(
-                    (string) $sheet->getCell($letra . "1")->getCalculatedValue(),
-                    ENT_QUOTES | ENT_HTML5, "UTF-8"
-                ));
-
-                $preview = [];
-                for ($r = 2; $r <= min(4, $sheet->getHighestDataRow()); $r++) {
-                    $cell = $sheet->getCell($letra . $r);
-                    $raw  = $cell->getValue();
-
-                    if (is_float($raw) || is_int($raw)) {
-                        $fmt = $cell->getStyle()->getNumberFormat()->getFormatCode();
-                        if (\PhpOffice\PhpSpreadsheet\Shared\Date::isDateTimeFormatCode($fmt)) {
-                            $ts  = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToTimestamp($raw);
-                            $val = date("d/m/Y", $ts);
-                        } else {
-                            $val = (string) $raw;
-                        }
-                    } else {
-                        $val = html_entity_decode(
-                            (string) $cell->getCalculatedValue(),
-                            ENT_QUOTES | ENT_HTML5, "UTF-8"
-                        );
-                    }
-
-                    $val = trim($val);
-                    if ($val !== "") $preview[] = $val;
-                }
-
-                $headers[]  = $header !== "" ? $header : "Coluna " . $letra;
-                $previews[] = $preview;
+            if ($abaAtiva < 0 || $abaAtiva >= count($sheetNames)) {
+                $abaAtiva = 0;
             }
 
+            $sheet   = $aberto["spreadsheet"]->getSheet($abaAtiva);
+            $lido    = $svc->lerCabecalhos($sheet, 3);
+            $headers = $lido["headers"];
+            $previews = $lido["previews"];
+            $colunas = $svc->rotulosColunas($headers, $previews);
+
+            $contasGrupos = DreConta::analiticasPorTipo($upload->tipo);
+            $contasLista  = DreConta::analiticasLista($upload->tipo);
+
+            $mapaSalvo = ProjetoMapeamentoColuna::porProjeto((int) $projeto->id, (string) $upload->tipo, $abaAtiva);
+            $layoutDetectado = $svc->detectarLayout($headers);
+
+            if ($mapaSalvo) {
+                $layout          = $svc->layoutDoMapa($mapaSalvo);
+                $expandido       = $svc->expandirMapa($mapaSalvo);
+                $origemMapeamento = "salvo";
+            } else {
+                $layout           = $layoutDetectado;
+                $expandido        = $svc->sugerirCampos($headers, $layout, $contasLista);
+                $origemMapeamento = ($expandido["campos"] || $expandido["periodos_matriz"]) ? "sugerido" : "vazio";
+            }
+
+            $campos         = $expandido["campos"];
+            $periodosMatriz = $expandido["periodos_matriz"];
+            $anoBase        = (int) ($expandido["ano_base"] ?? date("Y"));
+            if ($anoBase < 1990 || $anoBase > 2100) {
+                $anoBase = (int) date("Y");
+            }
         } catch (\Throwable $e) {
             $this->message->error("Não foi possível ler o arquivo: " . $e->getMessage());
             $this->router->redirect("admin.projeto.importacao", ["id" => $projeto->id]);
@@ -452,9 +438,9 @@ class ProjetoController extends ControllerAdmin
 
         $this->view->addData([
             "breadcrumb" => [
-                "Projetos"            => ["url" => $this->router->route("admin.projeto.index"), "current" => false],
-                $projetoLabel         => ["url" => $this->router->route("admin.projeto.abrir", ["id" => $projeto->id]), "current" => false],
-                "Importação"          => ["url" => $this->router->route("admin.projeto.importacao", ["id" => $projeto->id]), "current" => false],
+                "Projetos"              => ["url" => $this->router->route("admin.projeto.index"), "current" => false],
+                $projetoLabel           => ["url" => $this->router->route("admin.projeto.abrir", ["id" => $projeto->id]), "current" => false],
+                "Importação"            => ["url" => $this->router->route("admin.projeto.importacao", ["id" => $projeto->id]), "current" => false],
                 "Mapeamento de Colunas" => ["url" => false, "current" => true],
             ],
             "page" => [
@@ -463,7 +449,6 @@ class ProjetoController extends ControllerAdmin
             ],
         ]);
 
-        $mapeamentoSalvo = ProjetoMapeamentoColuna::porProjeto($projeto->id, $upload->tipo, $abaAtiva);
         $lancamentosExistentes = ProjetoLancamento::resumoPorProjeto($projeto->id, $upload->tipo);
 
         echo $this->view->render("admin/projeto/mapeamento", [
@@ -473,9 +458,16 @@ class ProjetoController extends ControllerAdmin
             "abaAtiva"              => $abaAtiva,
             "headers"               => $headers,
             "previews"              => $previews,
-            "contas"                => DreConta::analiticasPorTipo($upload->tipo),
+            "colunas"               => $colunas,
+            "contas"                => $contasGrupos,
             "tipos"                 => TipoDemonstrativo::options(),
-            "mapeamentoSalvo"       => $mapeamentoSalvo,
+            "layout"                => $layout,
+            "layoutDetectado"       => $layoutDetectado,
+            "campos"                => $campos,
+            "periodosMatriz"        => $periodosMatriz,
+            "anoBase"               => $anoBase,
+            "origemMapeamento"      => $origemMapeamento,
+            "mapeamentoSalvo"       => $mapaSalvo,
             "lancamentosExistentes" => $lancamentosExistentes,
             "csrf"                  => $this->csrf->generate(),
         ]);
@@ -497,41 +489,24 @@ class ProjetoController extends ControllerAdmin
         $abaIdx  = (int) ($data->aba ?? 0);
 
         try {
-            $reader      = IOFactory::createReaderForFile($caminho);
-            $spreadsheet = $reader->load($caminho);
-            $sheet       = $spreadsheet->getSheet($abaIdx);
-            $maxCol      = $sheet->getHighestDataColumn();
-            $maxRow      = min((int) $sheet->getHighestDataRow(), 51);
-            $maxColN     = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($maxCol);
+            $svc    = new PlanilhaImportacaoService();
+            $aberto = $svc->abrir($caminho);
+            $sheet  = $aberto["spreadsheet"]->getSheet($abaIdx);
+            $lido   = $svc->lerCabecalhos($sheet, 0);
+            $maxCol = $lido["highestCol"];
+            $maxRow = min($lido["highestRow"], 51);
 
             $rows = [];
             for ($r = 1; $r <= $maxRow; $r++) {
                 $row = [];
-                for ($c = 1; $c <= $maxColN; $c++) {
-                    $letra = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($c);
-                    $cell  = $sheet->getCell($letra . $r);
-                    $raw   = $cell->getValue();
-
-                    // Datas: valor numérico com formato de data → converte para d/m/Y
-                    if (is_float($raw) || is_int($raw)) {
-                        $fmt = $cell->getStyle()->getNumberFormat()->getFormatCode();
-                        if (\PhpOffice\PhpSpreadsheet\Shared\Date::isDateTimeFormatCode($fmt)) {
-                            $ts   = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToTimestamp($raw);
-                            $row[] = date("d/m/Y", $ts);
-                            continue;
-                        }
-                    }
-
-                    // Texto: usa o valor calculado e decodifica HTML entities
-                    $val   = $cell->getCalculatedValue();
-                    $row[] = html_entity_decode((string) $val, ENT_QUOTES | ENT_HTML5, "UTF-8");
+                for ($c = 1; $c <= $maxCol; $c++) {
+                    $row[] = $svc->celula($sheet, $r, $c, false);
                 }
                 $rows[] = $row;
             }
 
             header("Content-Type: application/json; charset=utf-8");
-            echo json_encode(["error" => false, "rows" => $rows, "maxCol" => $maxColN], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-
+            echo json_encode(["error" => false, "rows" => $rows, "maxCol" => $maxCol], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         } catch (\Throwable $e) {
             header("Content-Type: application/json; charset=utf-8");
             echo json_encode(["error" => true, "message" => $e->getMessage()]);
@@ -559,34 +534,72 @@ class ProjetoController extends ControllerAdmin
             return;
         }
 
-        $tipo    = $upload->tipo;
-        $aba     = (int) ($data->aba ?? 0);
-        $mapa    = (array) ($data->mapeamento ?? []);
-        $headers = (array) ($data->headers ?? []);
+        $caminho = PATH_ROOT . "/storage/tmp/planilhas/" . $upload->arquivo;
+        if (!file_exists($caminho)) {
+            $this->message->warning("Arquivo não encontrado. Faça o upload novamente");
+            $this->session->unset("planilha_upload");
+            $this->router->redirect("admin.projeto.importacao", ["id" => $projeto->id]);
+            return;
+        }
 
-        // Remove mapeamentos anteriores desta combinação projeto+tipo+aba
+        $tipo = $upload->tipo;
+        $aba  = (int) ($data->aba ?? 0);
+        $svc  = new PlanilhaImportacaoService();
+
+        try {
+            $aberto  = $svc->abrir($caminho);
+            $sheet   = $aberto["spreadsheet"]->getSheet($aba);
+            $headers = $svc->lerCabecalhos($sheet, 0)["headers"];
+        } catch (\Throwable $e) {
+            $this->message->error("Não foi possível ler o arquivo: " . $e->getMessage());
+            $this->router->redirect("admin.projeto.importacao.mapear", ["id" => $projeto->id]);
+            return;
+        }
+
+        $anoBase = (int) ($data->ano_base ?? date("Y"));
+        if ($anoBase < 1990 || $anoBase > 2100) {
+            $anoBase = (int) date("Y");
+        }
+
+        $linhas = $svc->compactarCampos(
+            (array) ($data->campos ?? []),
+            $headers,
+            (array) ($data->periodos_matriz ?? []),
+            $anoBase
+        );
+
+        $mapa = [];
+        foreach ($linhas as $linha) {
+            $mapa[(int) $linha["indice_coluna"]] = $linha["mapeamento"];
+        }
+
+        $layout   = $svc->layoutDoMapa($mapa);
+        $validado = $svc->validar($mapa, $layout);
+        if (!$validado["ok"]) {
+            $this->message->warning($validado["erro"] ?? "Mapeamento incompleto.");
+            $this->router->redirect("admin.projeto.importacao.mapear", ["id" => $projeto->id]);
+            return;
+        }
+
         DB::table("projeto_mapeamento_coluna")
             ->where("id_projeto", "=", $projeto->id)
             ->where("tipo_demonstrativo", "=", $tipo)
             ->where("aba", "=", $aba)
             ->delete();
 
-        foreach ($mapa as $indice => $valor) {
-            $valor = trim((string) $valor);
-            if ($valor === "") continue;
-
+        foreach ($linhas as $linha) {
             ProjetoMapeamentoColuna::create([
-                "id_projeto"        => $projeto->id,
+                "id_projeto"         => $projeto->id,
                 "tipo_demonstrativo" => $tipo,
-                "aba"               => $aba,
-                "indice_coluna"     => (int) $indice,
-                "header_original"   => trim((string) ($headers[$indice] ?? "Col " . ($indice + 1))),
-                "mapeamento"        => $valor,
+                "aba"                => $aba,
+                "indice_coluna"      => $linha["indice_coluna"],
+                "header_original"    => $linha["header_original"],
+                "mapeamento"         => $linha["mapeamento"],
             ]);
         }
 
         $this->message->success("Mapeamento salvo com sucesso");
-        $this->router->redirect("admin.projeto.importacao.mapear", ["id" => $projeto->id]);
+        $this->router->redirect("admin.projeto.importacao.mapear", ["id" => $projeto->id, "aba" => $aba]);
     }
 
     public function processarDados(Request $request): void
@@ -610,10 +623,10 @@ class ProjetoController extends ControllerAdmin
             return;
         }
 
-        $tipo = $upload->tipo;
-        $aba  = (int) ($data->aba ?? 0);
-
+        $tipo    = $upload->tipo;
+        $aba     = (int) ($data->aba ?? 0);
         $caminho = PATH_ROOT . "/storage/tmp/planilhas/" . $upload->arquivo;
+
         if (!file_exists($caminho)) {
             $this->message->warning("Arquivo não encontrado. Faça o upload novamente");
             $this->session->unset("planilha_upload");
@@ -621,162 +634,101 @@ class ProjetoController extends ControllerAdmin
             return;
         }
 
-        // Carrega o mapeamento salvo
-        $mapeamento = ProjetoMapeamentoColuna::porProjeto($projeto->id, $tipo, $aba);
-        if (empty($mapeamento)) {
+        $svc  = new PlanilhaImportacaoService();
+        $mapa = ProjetoMapeamentoColuna::porProjeto((int) $projeto->id, (string) $tipo, $aba);
+        if (empty($mapa)) {
             $this->message->warning("Nenhum mapeamento salvo para esta aba. Salve o mapeamento primeiro.");
-            $this->router->redirect("admin.projeto.importacao.mapear", ["id" => $projeto->id]);
+            $this->router->redirect("admin.projeto.importacao.mapear", ["id" => $projeto->id, "aba" => $aba]);
             return;
         }
 
-        // Prepara índices: [indice_coluna => mapeamento]
-        $mapa = [];
-        foreach ($mapeamento as $m) {
-            $mapa[(int) $m->indice_coluna] = $m->mapeamento;
+        $validado = $svc->validar($mapa, $svc->layoutDoMapa($mapa));
+        if (!$validado["ok"]) {
+            $this->message->warning($validado["erro"] ?? "Mapeamento incompleto.");
+            $this->router->redirect("admin.projeto.importacao.mapear", ["id" => $projeto->id, "aba" => $aba]);
+            return;
         }
 
         try {
-            $reader      = IOFactory::createReaderForFile($caminho);
-            $spreadsheet = $reader->load($caminho);
-            $sheet       = $spreadsheet->getSheet($aba);
-            $highestRow  = (int) $sheet->getHighestDataRow();
-            $highestCol  = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($sheet->getHighestDataColumn());
+            $resultado = $svc->processar(
+                $caminho,
+                $aba,
+                $mapa,
+                (int) $projeto->id,
+                (string) $tipo,
+                (int) $this->user->uid
+            );
 
-            // Remove lançamentos anteriores deste projeto+tipo+aba
-            ProjetoLancamento::limparPorProjeto($projeto->id, $tipo, $aba);
-
-            $inseridos = 0;
-
-            for ($r = 2; $r <= $highestRow; $r++) {
-                $valoresCelula = [];
-                $periodo  = null;
-                $descricao = null;
-                $unidade  = null;
-
-                // Primeiro passa: lê todos os valores da linha
-                for ($c = 1; $c <= $highestCol; $c++) {
-                    $letra   = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($c);
-                    $cell    = $sheet->getCell($letra . $r);
-                    $raw     = $cell->getValue();
-                    $cellVal = null;
-
-                    if (is_float($raw) || is_int($raw)) {
-                        $fmt = $cell->getStyle()->getNumberFormat()->getFormatCode();
-                        if (ExcelDate::isDateTimeFormatCode($fmt)) {
-                            $ts       = ExcelDate::excelToTimestamp($raw);
-                            $cellVal  = date("Y-m-d", $ts);
-                        } else {
-                            $cellVal = (string) $raw;
-                        }
-                    } else {
-                        $cellVal = trim(html_entity_decode(
-                            (string) $cell->getCalculatedValue(),
-                            ENT_QUOTES | ENT_HTML5, "UTF-8"
-                        ));
-                    }
-
-                    $valoresCelula[$c] = $cellVal;
+            if ($resultado["inseridos"] === 0) {
+                $this->message->warning("Nenhum lançamento foi gerado. Revise o mapeamento, os nomes das contas e o formato dos valores.");
+            } else {
+                $msg = $resultado["inseridos"] . " lançamento(s) importado(s)";
+                if ($resultado["ignorados"] > 0) {
+                    $msg .= " · " . $resultado["ignorados"] . " linha(s) ignorada(s)";
                 }
-
-                // Pula linha totalmente vazia
-                $valoresPreenchidos = array_filter($valoresCelula, fn ($v) => $v !== null && $v !== "");
-                if (empty($valoresPreenchidos)) continue;
-
-                // Extrai campos especiais
-                foreach ($mapa as $colIdx => $mapping) {
-                    $colIdx++; // 1-based para acessar $valoresCelula
-                    $rawVal = $valoresCelula[$colIdx] ?? "";
-
-                    if ($mapping === "__periodo__") {
-                        $periodo = self::parsePeriodo($rawVal);
-                    } elseif ($mapping === "__descricao__") {
-                        $descricao = $rawVal ?: null;
-                    } elseif ($mapping === "__unidade__") {
-                        $unidade = $rawVal ?: null;
-                    }
-                }
-
-                // Segundo passa: cria lançamentos para colunas mapeadas como conta_N
-                foreach ($mapa as $colIdx => $mapping) {
-                    if (!str_starts_with($mapping, "conta_")) continue;
-
-                    $idConta = (int) substr($mapping, 6);
-                    if ($idConta <= 0) continue;
-
-                    $colIdx++; // 1-based
-                    $rawVal  = $valoresCelula[$colIdx] ?? "";
-                    $rawVal  = str_replace([".", ","], ["", "."], (string) $rawVal);
-                    $valor   = is_numeric($rawVal) ? (float) $rawVal : null;
-
-                    if ($valor === null || $valor === 0.0) continue;
-
-                    ProjetoLancamento::create([
-                        "id_projeto"         => $projeto->id,
-                        "tipo_demonstrativo"  => $tipo,
-                        "aba"                => $aba,
-                        "id_dre_conta"       => $idConta,
-                        "periodo"            => $periodo,
-                        "descricao"          => $descricao,
-                        "valor"              => $valor,
-                        "unidade"            => $unidade,
-                        "linha"              => $r,
-                        "mapeamento"         => $mapping,
-                        "created_by"         => $this->user->uid,
-                    ]);
-
-                    $inseridos++;
-                }
+                $this->message->success($msg);
             }
 
-            $this->message->success("{$inseridos} lançamento(s) importado(s) com sucesso");
-            $this->router->redirect("admin.projeto.importacao.mapear", ["id" => $projeto->id]);
+            foreach ($resultado["avisos"] as $aviso) {
+                $this->message->warning($aviso);
+            }
 
+            $this->router->redirect("admin.projeto.importacao.mapear", ["id" => $projeto->id, "aba" => $aba]);
         } catch (\Throwable $e) {
             $this->message->error("Erro ao processar dados: " . $e->getMessage());
-            $this->router->redirect("admin.projeto.importacao.mapear", ["id" => $projeto->id]);
+            $this->router->redirect("admin.projeto.importacao.mapear", ["id" => $projeto->id, "aba" => $aba]);
         }
     }
 
-    private static function parsePeriodo(?string $raw): ?string
+    public function simularDados(Request $request): void
     {
-        if (!$raw) return null;
+        $this->authorize("projeto_gerenciar");
+        header("Content-Type: application/json; charset=utf-8");
 
-        $raw = trim($raw);
+        $data    = new Data($request->all());
+        $upload  = $this->session->get("planilha_upload");
+        $projeto = Projeto::find((int) ($data->id ?? 0));
 
-        // Já veio como data ISO (Y-m-d)
-        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $raw)) {
-            return $raw;
+        if (!$projeto || !$upload || ($upload->projeto ?? null) != $projeto->id) {
+            echo json_encode(["ok" => false, "error" => "Sessão expirada. Faça o upload novamente."]);
+            return;
         }
 
-        // "mm/yyyy" ou "mm/yy"
-        if (preg_match('/^(\d{1,2})[\/](\d{2,4})$/', $raw, $m)) {
-            $mes = str_pad($m[1], 2, "0", STR_PAD_LEFT);
-            $ano = strlen($m[2]) === 2 ? "20" . $m[2] : $m[2];
-            return "{$ano}-{$mes}-01";
+        $tipo    = $upload->tipo;
+        $aba     = (int) ($data->aba ?? 0);
+        $caminho = PATH_ROOT . "/storage/tmp/planilhas/" . $upload->arquivo;
+        if (!file_exists($caminho)) {
+            echo json_encode(["ok" => false, "error" => "Arquivo não encontrado."]);
+            return;
         }
 
-        // "mm/yyyy" via barra (dd/mm/yyyy) — pega só mês/ano
-        if (preg_match('/^(\d{2})[\/](\d{2})[\/](\d{4})$/', $raw, $m)) {
-            return "{$m[3]}-{$m[2]}-01";
+        $svc  = new PlanilhaImportacaoService();
+        $mapa = ProjetoMapeamentoColuna::porProjeto((int) $projeto->id, (string) $tipo, $aba);
+        if (empty($mapa)) {
+            echo json_encode(["ok" => false, "error" => "Salve o mapeamento antes de conferir."]);
+            return;
         }
 
-        // "yyyy/mm" 
-        if (preg_match('/^(\d{4})[\/](\d{1,2})$/', $raw, $m)) {
-            $mes = str_pad($m[2], 2, "0", STR_PAD_LEFT);
-            return "{$m[1]}-{$mes}-01";
+        $validado = $svc->validar($mapa, $svc->layoutDoMapa($mapa));
+        if (!$validado["ok"]) {
+            echo json_encode(["ok" => false, "error" => $validado["erro"] ?? "Mapeamento incompleto."]);
+            return;
         }
 
-        // Data Excel serial (numérico)
-        if (is_numeric($raw)) {
-            try {
-                $ts = ExcelDate::excelToTimestamp((int) $raw);
-                return date("Y-m-d", $ts);
-            } catch (\Throwable) {
-                return null;
-            }
+        try {
+            $resultado = $svc->processar(
+                $caminho,
+                $aba,
+                $mapa,
+                (int) $projeto->id,
+                (string) $tipo,
+                (int) $this->user->uid,
+                false
+            );
+            echo json_encode(["ok" => true] + $resultado, JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            echo json_encode(["ok" => false, "error" => $e->getMessage()]);
         }
-
-        return null;
     }
 
     public function sugerirMapeamento(Request $request): void
@@ -794,43 +746,78 @@ class ProjetoController extends ControllerAdmin
         }
 
         $headers = (array) ($data->headers ?? []);
-        if (empty($headers)) {
+        if ($headers === []) {
             echo json_encode(["ok" => false, "error" => "Nenhum cabeçalho recebido."]);
             return;
         }
 
-        // Monta lista de opções disponíveis para o prompt
-        $opcoes   = [];
-        $opcoes[] = "__periodo__   → Período / Competência";
-        $opcoes[] = "__descricao__ → Descrição / Histórico";
-        $opcoes[] = "__valor__     → Valor";
-        $opcoes[] = "__unidade__   → Unidade / Centro de Custo";
-
-        $gruposContas = DreConta::analiticasPorTipo($upload->tipo);
-        $contas       = $gruposContas ? array_merge(...array_values($gruposContas)) : [];
-        foreach ($contas as $conta) {
-            $opcoes[] = "conta_{$conta->id} → {$conta->codigo} — {$conta->nome}";
+        $svc    = new PlanilhaImportacaoService();
+        $layout = (string) ($data->layout ?? "");
+        if (!in_array($layout, [
+            PlanilhaImportacaoService::LAYOUT_COLUNAR,
+            PlanilhaImportacaoService::LAYOUT_LEDGER,
+            PlanilhaImportacaoService::LAYOUT_MATRIZ,
+        ], true)) {
+            $layout = $svc->detectarLayout($headers);
         }
 
-        // Monta lista de colunas a analisar
+        $contas = DreConta::analiticasLista($upload->tipo);
+
         $linhasColunas = [];
         foreach ($headers as $i => $h) {
-            $linhasColunas[] = "  [{$i}] " . trim((string) $h);
+            $letra = $svc->letra((int) $i);
+            $linhasColunas[] = "  [{$i}] {$letra} — " . trim((string) $h);
+        }
+
+        $camposSistema = [];
+        if ($layout === PlanilhaImportacaoService::LAYOUT_LEDGER) {
+            $camposSistema[] = "__periodo__ → Período / Competência";
+            $camposSistema[] = "__conta__ → Nome ou código da conta (texto da célula)";
+            $camposSistema[] = "__valor__ → Valor do lançamento";
+            $camposSistema[] = "__descricao__ → Descrição / Histórico (opcional)";
+            $camposSistema[] = "__unidade__ → Unidade / Centro de custo (opcional)";
+        } elseif ($layout === PlanilhaImportacaoService::LAYOUT_MATRIZ) {
+            $camposSistema[] = "__conta__ → Coluna com o nome ou código da conta";
+            $camposSistema[] = "periodos_matriz → índices das colunas de período/ano (valores)";
+        } else {
+            $camposSistema[] = "__periodo__ → Período / Competência";
+            $camposSistema[] = "__descricao__ → Descrição / Histórico (opcional)";
+            $camposSistema[] = "__unidade__ → Unidade / Centro de custo (opcional)";
+            foreach ($contas as $conta) {
+                $camposSistema[] = "conta_{$conta->id} → {$conta->codigo} — {$conta->nome}";
+            }
         }
 
         $systemPrompt = <<<PROMPT
-Você é um assistente especialista em contabilidade e finanças empresariais, com foco em demonstrativos financeiros (DRE, DFC, Balanço Patrimonial).
-Sua tarefa é analisar nomes de colunas de uma planilha importada de terceiros e sugerir o mapeamento mais adequado para cada coluna, com base nas opções disponíveis.
-Responda SOMENTE com um objeto JSON válido, sem markdown, sem explicações, sem texto adicional.
-O formato da resposta deve ser exatamente:
-{"sugestoes": {"0": "valor_opcao", "1": "valor_opcao", ...}}
-Onde a chave é o índice da coluna (string) e o valor é um dos identificadores das opções disponíveis.
-Se uma coluna não se encaixar em nenhuma opção, use string vazia "".
+Você é um assistente especialista em contabilidade e finanças empresariais (DRE, DFC, Balanço).
+Sua tarefa é mapear CAMPOS DO SISTEMA para COLUNAS da planilha (não o contrário).
+Responda SOMENTE com um objeto JSON válido, sem markdown e sem texto extra.
+Formato exatamente:
+{"campos": {"__periodo__": 0, "conta_12": 3}, "periodos_matriz": [1, 2]}
+- A chave de "campos" é o identificador do campo do sistema.
+- O valor é o índice inteiro (0-based) da coluna da planilha.
+- "periodos_matriz" só se aplica ao layout matriz: lista de índices das colunas de período/valor.
+- Não atribua a mesma coluna a dois campos.
+- Se um campo não tiver coluna óbvia, omita-o.
 PROMPT;
 
-        $prompt = "Tipo de demonstrativo: " . strtoupper($upload->tipo) . "\n\n";
+        $prompt  = "Tipo de demonstrativo: " . strtoupper((string) $upload->tipo) . "\n";
+        $prompt .= "Layout: {$layout}\n\n";
         $prompt .= "Colunas da planilha:\n" . implode("\n", $linhasColunas) . "\n\n";
-        $prompt .= "Opções disponíveis para mapeamento:\n" . implode("\n", $opcoes);
+        $prompt .= "Campos do sistema:\n" . implode("\n", $camposSistema);
+
+        $idsValidos = [];
+        foreach ($contas as $conta) {
+            $idsValidos["conta_" . $conta->id] = true;
+        }
+        $especiais = [
+            PlanilhaImportacaoService::DEST_PERIODO   => true,
+            PlanilhaImportacaoService::DEST_DESCRICAO => true,
+            PlanilhaImportacaoService::DEST_VALOR     => true,
+            PlanilhaImportacaoService::DEST_UNIDADE   => true,
+            PlanilhaImportacaoService::DEST_CONTA     => true,
+        ];
+        $maxIndice = count($headers) - 1;
 
         try {
             $ai     = new ChatGPT();
@@ -841,32 +828,53 @@ PROMPT;
                 return;
             }
 
-            // Extrai JSON da resposta (remove eventual markdown se o modelo retornar)
-            $text = trim($result["text"] ?? "");
-            $text = preg_replace('/^```(?:json)?\s*/i', '', $text);
-            $text = preg_replace('/\s*```$/', '', $text);
+            $text = trim((string) ($result["text"] ?? ""));
+            $text = preg_replace('/^```(?:json)?\s*/i', "", $text);
+            $text = preg_replace('/\s*```$/', "", $text);
 
             $decoded = json_decode($text, true);
-
-            if (!isset($decoded["sugestoes"]) || !is_array($decoded["sugestoes"])) {
+            if (!is_array($decoded)) {
                 echo json_encode(["ok" => false, "error" => "Resposta da IA em formato inesperado."]);
                 return;
             }
 
-            // Valida que os valores retornados existem nas opções permitidas
-            $valoresPermitidos = ["", "__periodo__", "__descricao__", "__valor__", "__unidade__"];
-            foreach ($contas as $conta) {
-                $valoresPermitidos[] = "conta_{$conta->id}";
+            $camposBrutos = is_array($decoded["campos"] ?? null) ? $decoded["campos"] : [];
+            $matrizBrutos = is_array($decoded["periodos_matriz"] ?? null) ? $decoded["periodos_matriz"] : [];
+
+            $campos = [];
+            $usados = [];
+            foreach ($camposBrutos as $destino => $indice) {
+                $destino = trim((string) $destino);
+                $indice  = (int) $indice;
+                if ($indice < 0 || $indice > $maxIndice || isset($usados[$indice])) {
+                    continue;
+                }
+                $ok = isset($especiais[$destino]) || isset($idsValidos[$destino]);
+                if (!$ok) {
+                    continue;
+                }
+                $campos[$destino] = $indice;
+                $usados[$indice]  = true;
             }
 
-            $sugestoes = [];
-            foreach ($decoded["sugestoes"] as $idx => $val) {
-                $val = trim((string) $val);
-                $sugestoes[(string)(int) $idx] = in_array($val, $valoresPermitidos) ? $val : "";
+            $periodos = [];
+            if ($layout === PlanilhaImportacaoService::LAYOUT_MATRIZ) {
+                foreach ($matrizBrutos as $indice) {
+                    $indice = (int) $indice;
+                    if ($indice < 0 || $indice > $maxIndice || isset($usados[$indice])) {
+                        continue;
+                    }
+                    $periodos[] = $indice;
+                    $usados[$indice] = true;
+                }
             }
 
-            echo json_encode(["ok" => true, "sugestoes" => $sugestoes], JSON_UNESCAPED_UNICODE);
-
+            echo json_encode([
+                "ok"              => true,
+                "layout"          => $layout,
+                "campos"          => $campos,
+                "periodos_matriz" => $periodos,
+            ], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
             echo json_encode(["ok" => false, "error" => $e->getMessage()]);
         }

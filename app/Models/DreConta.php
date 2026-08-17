@@ -108,6 +108,132 @@ class DreConta extends Model
     }
 
     /**
+     * Lista plana das analíticas (sem agrupamento).
+     *
+     * @return array<int,object>
+     */
+    public static function analiticasLista(?string $tipo): array
+    {
+        $lista = [];
+        foreach (self::analiticasPorTipo($tipo) as $contas) {
+            foreach ($contas as $conta) {
+                $lista[] = $conta;
+            }
+        }
+        return $lista;
+    }
+
+    /**
+     * Resolve uma conta analítica pelo texto da planilha (código, nome ou "código nome").
+     * Ignora sintéticas e linhas de resultado calculado.
+     */
+    public static function buscarAnaliticaPorTexto(?string $tipo, string $texto): ?object
+    {
+        $tipo  = self::resolverTipo($tipo);
+        $texto = trim($texto);
+        if ($texto === "") {
+            return null;
+        }
+
+        static $cache = [];
+        if (!isset($cache[$tipo])) {
+            $cache[$tipo] = DB::table("dre_conta")
+                ->where("tipo_demonstrativo", "=", $tipo)
+                ->where("tipo", "=", "analitica")
+                ->where("trash", "=", 0)
+                ->where("eh_resultado", "=", 0)
+                ->get();
+        }
+
+        $norm = static function (string $t): string {
+            $t = mb_strtolower(trim($t), "UTF-8");
+            $ascii = @iconv("UTF-8", "ASCII//TRANSLIT//IGNORE", $t);
+            $t = is_string($ascii) ? $ascii : $t;
+            return (string) preg_replace("/[^a-z0-9]+/", "", $t);
+        };
+
+        $nTexto  = $norm($texto);
+        return self::casarEmLista($cache[$tipo], $texto, $norm);
+    }
+
+    /**
+     * Casa um texto da planilha com uma conta da lista. Só devolve se o match for único.
+     *
+     * @param array<int,object> $contas
+     * @param callable|null $norm
+     */
+    public static function casarEmLista(array $contas, string $texto, ?callable $norm = null): ?object
+    {
+        $texto = trim($texto);
+        if ($texto === "" || $contas === []) {
+            return null;
+        }
+
+        $norm = $norm ?? static function (string $t): string {
+            $t = mb_strtolower(trim($t), "UTF-8");
+            $ascii = @iconv("UTF-8", "ASCII//TRANSLIT//IGNORE", $t);
+            $t = is_string($ascii) ? $ascii : $t;
+            return (string) preg_replace("/[^a-z0-9]+/", "", $t);
+        };
+
+        $nTexto = $norm($texto);
+        if ($nTexto === "") {
+            return null;
+        }
+
+        foreach ($contas as $conta) {
+            $codigo = trim((string) ($conta->codigo ?? ""));
+            $nome   = trim((string) ($conta->nome ?? ""));
+            if (strcasecmp($codigo, $texto) === 0 || strcasecmp($nome, $texto) === 0) {
+                return $conta;
+            }
+            if ($codigo !== "" && preg_match('/^' . preg_quote($codigo, "/") . '(?:\s+.+)?$/u', $texto)) {
+                return $conta;
+            }
+        }
+
+        $iguais = [];
+        foreach ($contas as $conta) {
+            if ($norm((string) ($conta->nome ?? "")) === $nTexto || $norm((string) ($conta->codigo ?? "")) === $nTexto) {
+                $iguais[] = $conta;
+            }
+        }
+        if (count($iguais) === 1) {
+            return $iguais[0];
+        }
+
+        $contem = [];
+        if (strlen($nTexto) >= 8) {
+            foreach ($contas as $conta) {
+                $nNome = $norm((string) ($conta->nome ?? ""));
+                if ($nNome === "" || strlen($nNome) < 8) {
+                    continue;
+                }
+                if (str_contains($nTexto, $nNome) || str_contains($nNome, $nTexto)) {
+                    $contem[] = $conta;
+                }
+            }
+            if (count($contem) === 1) {
+                return $contem[0];
+            }
+        }
+
+        $parecidos = [];
+        foreach ($contas as $conta) {
+            $nNome = $norm((string) ($conta->nome ?? ""));
+            if ($nNome === "") {
+                continue;
+            }
+            similar_text($nTexto, $nNome, $pct);
+            if ($pct >= 90) {
+                $parecidos[] = $conta;
+            }
+        }
+
+        return count($parecidos) === 1 ? $parecidos[0] : null;
+    }
+
+    /**
      * Gera o código da conta a partir do pai, dentro de um tipo de demonstrativo.
      * Ex: pai com código "1.2" e 3 filhos existentes → "1.2.4"
      */

@@ -145,6 +145,7 @@ $router->namespace("\App\Controllers\Admin")->group(null);
     $router->post("/projetos/{id}/importacao/mapear/preview", "ProjetoController:mapeamentoPreview", "admin.projeto.importacao.mapear.preview");
     $router->post("/projetos/{id}/importacao/mapear/salvar", "ProjetoController:salvarMapeamento", "admin.projeto.importacao.mapear.salvar");
     $router->post("/projetos/{id}/importacao/mapear/sugerir", "ProjetoController:sugerirMapeamento", "admin.projeto.importacao.mapear.sugerir");
+    $router->post("/projetos/{id}/importacao/mapear/simular", "ProjetoController:simularDados", "admin.projeto.importacao.mapear.simular");
     $router->post("/projetos/{id}/importacao/processar", "ProjetoController:processarDados", "admin.projeto.importacao.processar");
 
     // EMPRESAS
