@@ -1,0 +1,879 @@
+﻿<?php $this->layout("app/template/base"); ?>
+
+<?php $this->start("styles") ?>
+<style>
+.popover-sm .popover-body { font-size: .72rem; padding: .5rem .6rem; text-align: center; }
+</style>
+<?php $this->end() ?>
+
+<?php $this->start("page-actions") ?>
+<?php if (allow("cartao_editar")): ?>
+<a class="btn btn-white" href="<?=$router->route("admin.cartao.editar", ["id" => $cartao->id])?>"><i class="uil uil-edit-alt"></i> Editar cartão</a>
+<?php endif ?>
+<?php $this->end() ?>
+
+<?php $this->start("page-buttons") ?>
+<?php if ($status_enum && $status_enum->value === 'ATIVO' && $permissao['mov']) : ?>
+<button type="button" class="btn btn-green"
+        data-bs-toggle="modal" data-bs-target="#modal-recarga">
+    <i class="uil uil-plus-circle me-1"></i> Recarga
+</button>
+<button type="button" class="btn btn-primary text-white"
+        data-bs-toggle="modal" data-bs-target="#modal-lancar-venda">
+    <i class="uil uil-utensils me-1"></i> Registrar Gasto
+</button>
+<button type="button" class="btn btn-warning"
+        data-bs-toggle="modal" data-bs-target="#modal-consumo">
+    <i class="uil uil-minus-circle me-1"></i> Usar Saldo
+</button>
+<button type="button" class="btn btn-secondary"
+        data-bs-toggle="modal" data-bs-target="#modal-ajuste">
+    <i class="uil uil-sliders-v-alt me-1"></i> Ajuste Manual
+</button>
+<?php endif ?>
+<?php $this->end() ?>
+
+<div class="row g-3">
+
+    <!-- STATUS / ALERTAS -->
+    <?php if ($status_enum && $status_enum->value !== 'ATIVO') : ?>
+    <div class="col-12">
+        <?php
+            $alertClass = match ($status_enum->value) {
+                'BLOQUEADO' => 'warning',
+                'VENCIDO'   => 'danger',
+                'CANCELADO' => 'danger',
+                default     => 'secondary',
+            };
+        ?>
+        <div class="alert alert-<?= $alertClass ?> d-flex align-items-center gap-2 mb-0">
+            <i class="uil uil-exclamation-triangle fs-5"></i>
+            <div>
+                <strong>Cartão <?= htmlspecialchars($status_enum->label(), ENT_QUOTES, 'UTF-8') ?></strong>
+                <?php if (!empty($cartao->motivo_bloqueio)) : ?>
+                    - <?= htmlspecialchars((string) $cartao->motivo_bloqueio, ENT_QUOTES, 'UTF-8') ?>
+                <?php endif ?>
+            </div>
+        </div>
+    </div>
+    <?php endif ?>
+
+    <!-- COLUNA ESQUERDA -->
+    <div class="col-12 col-lg-4 d-flex flex-column gap-3">
+
+        <!-- CARTÃO -->
+        <div class="card h-auto">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <h6 class="card-title mb-0"><i class="uil uil-credit-card me-1"></i> Cartão</h6>
+                    <?= $cartao->status_print ?>
+                </div>
+                <div class="mb-2">
+                    <small class="text-muted d-block">Código</small>
+                    <span class="font-monospace fw-semibold fs-1">
+                        <?= htmlspecialchars((string) ($cartao->codigo_unico ?? '-'), ENT_QUOTES, 'UTF-8') ?>
+                    </span>
+                </div>
+                <div class="mb-2">
+                    <small class="text-muted d-block">Validade</small>
+                    <span><?= $cartao->validade_print ?></span>
+                </div>
+                <?php if (!empty($cartao->data_bloqueio)) : ?>
+                <div class="mb-0">
+                    <small class="text-muted d-block">Bloqueado em</small>
+                    <span><?= format_date((string) $cartao->data_bloqueio) ?></span>
+                </div>
+                <?php endif ?>
+            </div>
+        </div>
+
+        <!-- CLIENTE -->
+        <div class="card h-auto">
+            <div class="card-body">
+                <h6 class="card-title mb-3"><i class="uil uil-user me-1"></i> Cliente</h6>
+                <div class="mb-2">
+                    <small class="text-muted d-block">Nome</small>
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <span class="fw-semibold"><?= htmlspecialchars($cartao->cliente_print, ENT_QUOTES, 'UTF-8') ?></span>
+                        <?php if (!empty($cartao->cliente_cartoes_total) && !empty($cartao->cliente_cartoes_url)) : ?>
+                            <a href="<?= $cartao->cliente_cartoes_url ?>"
+                               class="badge text-decoration-none"
+                               style="background:#e7f1ff;color:#0d6efd;border:1px solid #cfe2ff;">
+                                <?= number_format((int) $cartao->cliente_cartoes_total, 0, ',', '.') ?> cartões
+                            </a>
+                        <?php endif ?>
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <small class="text-muted d-block">Documento</small>
+                    <span><?= $cartao->cliente_doc_print ?></span>
+                </div>
+                <div class="mb-0">
+                    <small class="text-muted d-block">Telefone</small>
+                    <span><?= $cartao->cliente_phone_print ?></span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- COLUNA DIREITA -->
+    <div class="col-12 col-lg-8 d-flex flex-column gap-3">
+
+        <!-- SALDO -->
+        <div class="card h-auto border-start border-4 border-primary">
+            <div class="card-body">
+                <small class="text-muted text-uppercase fw-semibold letter-spacing-1">Saldo disponível</small>
+                <div id="saldo-display" class="display-5 fw-bold text-primary mt-1"
+                     data-value="<?= number_format((float) ($cartao->saldo ?? 0), 2, '.', '') ?>">
+                    <?= $cartao->saldo_print ?>
+                </div>
+                <?php if ($resumo->ultima_movimentacao) : ?>
+                    <small class="text-muted">Última movimentação: <?= datetimebr((string) $resumo->ultima_movimentacao) ?></small>
+                <?php else : ?>
+                    <small class="text-muted">Nenhuma movimentação registrada</small>
+                <?php endif ?>
+            </div>
+        </div>
+
+        <!-- BREAKDOWN -->
+        <div class="card h-auto">
+            <div class="card-body">
+                <h6 class="card-title mb-3"><i class="uil uil-chart-line me-1"></i> Movimentações</h6>
+                <div class="row g-2 text-center">
+                    <div class="col-6 col-sm-4">
+                        <div class="p-2 rounded bg-light">
+                            <small class="text-muted d-block">Recargas</small>
+                            <span class="fw-semibold">R$ <?= moedabr($resumo->total_recargas) ?></span>
+                        </div>
+                    </div>
+                    <div class="col-6 col-sm-4">
+                        <div class="p-2 rounded bg-light">
+                            <small class="text-muted d-block">Cashback</small>
+                            <span class="fw-semibold text-success">R$ <?= moedabr($resumo->total_cashback) ?></span>
+                        </div>
+                    </div>
+                    <div class="col-6 col-sm-4">
+                        <div class="p-2 rounded bg-light">
+                            <small class="text-muted d-block">Fidelidade</small>
+                            <span class="fw-semibold text-success">R$ <?= moedabr($resumo->total_fidelidade) ?></span>
+                        </div>
+                    </div>
+                    <div class="col-6 col-sm-4">
+                        <div class="p-2 rounded bg-light">
+                            <small class="text-muted d-block">Uso do saldo</small>
+                            <span class="fw-semibold text-danger">R$ <?= moedabr($resumo->total_uso_saldo) ?></span>
+                        </div>
+                    </div>
+                    <div class="col-6 col-sm-4">
+                        <div class="p-2 rounded bg-light">
+                            <small class="text-muted d-block">Ajuste Crédito</small>
+                            <span class="fw-semibold text-success">R$ <?= moedabr($resumo->total_ajustes_credito) ?></span>
+                        </div>
+                    </div>
+                    <div class="col-6 col-sm-4">
+                        <div class="p-2 rounded bg-light">
+                            <small class="text-muted d-block">Ajuste Débito</small>
+                            <span class="fw-semibold text-danger">R$ <?= moedabr($resumo->total_ajustes_debito) ?></span>
+                        </div>
+                    </div>
+                    <div class="col-6 col-sm-4">
+                        <div class="p-2 rounded bg-light">
+                            <small class="text-muted d-block">Estorno Crédito</small>
+                            <span class="fw-semibold text-success">R$ <?= moedabr($resumo->total_estornos_credito) ?></span>
+                        </div>
+                    </div>
+                    <div class="col-6 col-sm-4">
+                        <div class="p-2 rounded bg-light">
+                            <small class="text-muted d-block">Estorno Débito</small>
+                            <span class="fw-semibold text-danger">R$ <?= moedabr($resumo->total_estornos_debito) ?></span>
+                        </div>
+                    </div>
+                    <div class="col-6 col-sm-4">
+                        <div class="p-2 rounded bg-light">
+                            <small class="text-muted d-block">Expiração</small>
+                            <span class="fw-semibold text-secondary">R$ <?= moedabr($resumo->total_expiracao) ?></span>
+                        </div>
+                    </div>
+                    <div class="col-6 col-sm-4">
+                        <div class="p-2 rounded bg-light">
+                            <?php
+                                $frequenciaLabel = 'Sem gastos suficientes';
+                                $freqSemana = (float) ($resumo->frequencia_vendas_por_semana ?? 0);
+                                $freqMes = (float) ($resumo->frequencia_vendas_por_mes ?? 0);
+                                $freqDias = (float) ($resumo->frequencia_vendas_intervalo_dias ?? 0);
+                                $diasBase = (int) ($resumo->dias_base_vendas ?? 0);
+                                $formatFreq = static function (float $valor): string {
+                                    $valor = round($valor, 1);
+
+                                    if (abs($valor - round($valor)) < 0.05) {
+                                        return number_format($valor, 0, ',', '.');
+                                    }
+
+                                    return number_format($valor, 1, ',', '.');
+                                };
+
+                                if ((int) ($resumo->quantidade_vendas ?? 0) > 0) {
+                                    if ($diasBase >= 60) {
+                                        $frequenciaLabel = $formatFreq($freqMes) . ' gasto' . ($freqMes > 1.05 ? 's' : '') . ' por mes';
+                                    } elseif ($diasBase >= 14) {
+                                        $frequenciaLabel = '1 gasto a cada ' . $formatFreq($freqDias) . ' dia' . ($freqDias > 1.05 ? 's' : '');
+                                    } else {
+                                        $frequenciaLabel = $formatFreq($freqSemana) . ' gasto' . ($freqSemana > 1.05 ? 's' : '') . ' por semana';
+                                    }
+                                }
+
+                                $popoverVendas = ''
+                                    . 'Total de ' . number_format((int) ($resumo->quantidade_vendas ?? 0), 0, ',', '.') . ' gastos<br>'
+                                    . 'Valor total R$ ' . moedabr((float) ($resumo->total_vendas_valor ?? 0)) . '<br>'
+                                    . 'Ticket medio R$ ' . moedabr((float) ($resumo->ticket_medio_vendas ?? 0)) . '<br>'
+                                    . 'Frequencia: ' . $frequenciaLabel;
+                            ?>
+                            <small class="text-muted d-block">
+                                Gastos Totais
+                                <button type="button"
+                                        class="btn btn-link btn-sm p-0 ms-1 align-baseline text-muted"
+                                        data-bs-toggle="popover"
+                                        data-bs-trigger="focus hover"
+                                        data-bs-placement="top"
+                                        data-bs-html="true"
+                                        data-bs-content="<?= htmlspecialchars($popoverVendas, ENT_QUOTES, 'UTF-8') ?>">
+                                    <i class="uil uil-info-circle"></i>
+                                </button>
+                            </small>
+                            <span class="fw-semibold"><?= number_format((int) ($resumo->quantidade_vendas ?? 0), 0, ',', '.') ?> <small class="text-muted fw-normal">/ R$ <?= moedabr((float) ($resumo->total_vendas_valor ?? 0)) ?></small></span>
+                        </div>
+                    </div>
+                    <div class="col-6 col-sm-4">
+                        <?php
+                            $acumulado = (int) ($cartao->acumulado ?? 0);
+                            $valorAcumulado = (float) ($cartao->valor_acumulado ?? 0);
+                            $gatilhoVendas = $regra_fidelidade ? (int) ($regra_fidelidade->quantidade_vendas ?? 0) : 0;
+                            $valorMinimoVenda = $regra_fidelidade ? (float) ($regra_fidelidade->valor_minimo_venda ?? 0) : 0;
+                            $gatilhoValor = $regra_fidelidade ? (float) ($regra_fidelidade->valor_acumulado_minimo ?? 0) : 0;
+                            $tipoValorAcumulado = $regra_fidelidade ? strtoupper(trim((string) ($regra_fidelidade->tipo_valor_acumulado ?? 'CICLICO'))) : 'CICLICO';
+                            $gatilhoValorEhUnico = $tipoValorAcumulado === 'UNICO';
+                            $gatilhoValorJaUsado = $regra_fidelidade
+                                && (int) ($cartao->fidelidade_valor_unico_regra_id ?? 0) > 0
+                                && (int) ($cartao->fidelidade_valor_unico_regra_id ?? 0) === (int) ($regra_fidelidade->id ?? 0);
+                            $elegivel = ($gatilhoVendas > 0 && $acumulado >= $gatilhoVendas)
+                                || ($gatilhoValor > 0 && (!$gatilhoValorEhUnico || !$gatilhoValorJaUsado) && $valorAcumulado >= $gatilhoValor);
+                            $popoverFidelidade = [];
+
+                            if ($gatilhoVendas > 0) {
+                                if ($valorMinimoVenda > 0) {
+                                    $popoverFidelidade[] = 'Conta só gasto a partir de R$ ' . moedabr($valorMinimoVenda) . '.';
+                                } else {
+                                    $popoverFidelidade[] = 'A contagem considera todos os gastos.';
+                                }
+                            }
+
+                            if ($gatilhoValor > 0) {
+                                $popoverFidelidade[] = 'O acumulado em valor soma todos os gastos.';
+                                $popoverFidelidade[] = $gatilhoValorEhUnico
+                                    ? 'Ao bater essa meta, o bonus por valor libera uma unica vez por cartao.'
+                                    : 'Ao bater essa meta, o bonus por valor pode liberar a cada nova meta atingida.';
+                            }
+                        ?>
+                        <div class="p-2 rounded <?= $elegivel ? 'bg-warning bg-opacity-25' : 'bg-light' ?>">
+                            <small class="text-muted d-block">
+                                Progresso Fidelidade
+                                <?php if (!empty($popoverFidelidade)) : ?>
+                                    <button type="button"
+                                            class="btn btn-link btn-sm p-0 ms-1 align-baseline text-muted"
+                                            data-bs-toggle="popover"
+                                            data-bs-trigger="focus hover"
+                                            data-bs-placement="top"
+                                            data-bs-html="true"
+                                            data-bs-content="<?= htmlspecialchars(implode('<br>', $popoverFidelidade), ENT_QUOTES, 'UTF-8') ?>">
+                                        <i class="uil uil-info-circle"></i>
+                                    </button>
+                                <?php endif ?>
+                            </small>
+                            <?php if ($regra_fidelidade && $gatilhoVendas > 0) : ?>
+                                <div class="fw-semibold">
+                                    <?= number_format($acumulado, 0, ',', '.') ?>
+                                    <small class="text-muted fw-normal">/ <?= number_format($gatilhoVendas, 0, ',', '.') ?> gastos</small>
+                                </div>
+                            <?php endif ?>
+                            <?php if ($regra_fidelidade && $gatilhoValor > 0) : ?>
+                                <div class="fw-semibold">
+                                    R$ <?= moedabr($valorAcumulado) ?>
+                                    <small class="text-muted fw-normal">/ R$ <?= moedabr($gatilhoValor) ?></small>
+                                </div>
+                                <?php if ($gatilhoValorEhUnico && $gatilhoValorJaUsado) : ?>
+                                    <small class="text-muted d-block">Meta por valor ja utilizada nesta regra.</small>
+                                <?php endif ?>
+                            <?php endif ?>
+                            <?php if (!$regra_fidelidade) : ?>
+                                <span class="fw-semibold text-muted">Sem regra ativa</span>
+                            <?php endif ?>
+                            <?php if ($elegivel && !empty($permissao['editar'])) : ?>
+                                <a href="<?= $router->route('admin.cartao.aplicar.fidelidade', ['id' => $cartao->id]) ?>"
+                                   class="btn btn-warning btn-xs mt-1 w-100"
+                                   onclick="ConfirmLink(this.href, 'Aplicar bônus de fidelidade a este cartão?'); return false;"
+                                   style="font-size:.75rem;padding:2px 6px">
+                                    <i class="uil uil-award me-1"></i> Aplicar Bônus
+                                </a>
+                            <?php endif ?>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- EXTRATO -->
+    <div class="col-12">
+        <div class="card h-auto">
+            <div class="card-body">
+                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-3">
+                    <div class="d-flex flex-column gap-2">
+                        <h6 class="card-title mb-0"><i class="uil uil-receipt me-1"></i> Extrato</h6>
+                        <form id="form-filtro-extrato"
+                              class="row g-2 align-items-end"
+                              data-filter-url="<?= $extrato_filtro_url ?>">
+                            <input type="hidden" name="id" value="<?= $cartao->id ?>">
+                            <div class="col-12 col-md-3">
+                                <label for="extrato_tipo" class="form-label form-label-sm mb-1">Tipo</label>
+                                <select class="form-select form-select-sm" id="extrato_tipo" name="tipo">
+                                    <option value="">Todos</option>
+                                    <?php foreach ($movimentacao_tipos as $tipo) : ?>
+                                        <option value="<?= htmlspecialchars((string) ($tipo->value ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                                            <?= htmlspecialchars((string) ($tipo->label ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                                        </option>
+                                    <?php endforeach ?>
+                                </select>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label for="extrato_data_inicial" class="form-label form-label-sm mb-1">Data inicial</label>
+                                <input type="date" class="form-control form-control-sm" id="extrato_data_inicial" name="data_inicial">
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label for="extrato_data_final" class="form-label form-label-sm mb-1">Data final</label>
+                                <input type="date" class="form-control form-control-sm" id="extrato_data_final" name="data_final">
+                            </div>
+                            <div class="col-12 col-md-auto d-flex gap-2">
+                                <button type="button" class="btn btn-sm btn-primary" id="btn-filtrar-extrato">
+                                    <i class="uil uil-filter me-1"></i> Filtrar
+                                </button>
+                                <button type="button" class="btn btn-sm btn-light" id="btn-limpar-filtro-extrato">
+                                    Limpar
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <a href="<?= $router->route('admin.cartao.extrato.xls', ['id' => $cartao->id]) ?>"
+                           class="btn btn-sm btn-outline-success" title="Exportar XLS">
+                            <i class="uil uil-file-alt me-1"></i> XLS
+                        </a>
+                        <a href="<?= $router->route('admin.cartao.extrato.pdf', ['id' => $cartao->id]) ?>"
+                           class="btn btn-sm btn-outline-danger" title="Exportar PDF" target="_blank" rel="noopener">
+                            <i class="uil uil-file-alt me-1"></i> PDF
+                        </a>
+                    </div>
+                </div>
+                <div id="extrato-table-wrapper">
+                <?php if (empty($movimentacoes)) : ?>
+                    <p class="text-muted mb-0">Nenhuma movimentacao registrada.</p>
+                <?php else : ?>
+                <div class="table-responsive">
+                    <table
+                        id="table-extrato-cartao"
+                        class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Tipo</th>
+                                <th>Valor</th>
+                                <th>Saldo após</th>
+                                <th>Forma</th>
+                                <th>Observação</th>
+                                <th class="text-end">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($movimentacoes as $mov) : ?>
+                            <tr data-tipo="<?= htmlspecialchars((string) ($mov->tipo_filter ?? $mov->tipo ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                data-data="<?= htmlspecialchars((string) date('Y-m-d', strtotime((string) ($mov->created_at ?? 'now'))), ENT_QUOTES, 'UTF-8') ?>">
+                                <td class="text-nowrap" data-order="<?= htmlspecialchars((string) ($mov->created_at ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                                    <small><?= $mov->data_print ?></small>
+                                </td>
+                                <td class="text-nowrap"><?= $mov->tipo_print ?><?= $mov->info_icon ?? '' ?></td>
+                                <td class="text-end text-nowrap">
+                                    <?= $mov->sentido_icon ?>
+                                    <?php if ($mov->is_credito === null) : ?>
+                                        <span class="fw-semibold"><?= $mov->valor_print ?></span>
+                                    <?php else : ?>
+                                        <span class="<?= $mov->is_credito ? 'text-success' : 'text-danger' ?> fw-semibold">
+                                            <?= $mov->valor_print ?>
+                                        </span>
+                                    <?php endif ?>
+                                    <?php if (!empty($mov->foi_estornada)) : ?>
+                                        <span class="badge ms-1" style="background:#fff3cd;color:#856404;border:1px solid #ffe69c;">
+                                            <i class="uil uil-history-alt me-1"></i> Estornada
+                                        </span>
+                                    <?php endif ?>
+                                </td>
+                                <td class="text-end text-nowrap">
+                                    <small class="text-muted"><?= $mov->saldo_print ?></small>
+                                </td>
+                                <td><small><?= $mov->forma_print ?></small></td>
+                                <td>
+                                    <small class="text-muted">
+                                        <?= htmlspecialchars((string) ($mov->observacao_print ?? $mov->descricao ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                                    </small>
+                                </td>
+                                <td class="text-end text-nowrap">
+                                    <?php if (!empty($mov->can_estornar) && !empty($permissao['mov'])) : ?>
+                                        <button type="button"
+                                                class="btn btn-xs btn-outline-warning btn-estornar-movimentacao"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#modal-estorno"
+                                                data-id="<?= (int) ($mov->id ?? 0) ?>"
+                                                data-tipo="<?= htmlspecialchars(strip_tags((string) ($mov->tipo_print ?? '')), ENT_QUOTES, 'UTF-8') ?>"
+                                                data-valor="<?= htmlspecialchars((string) ($mov->valor_print ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                                            <i class="uil uil-history-alt me-1"></i> Estornar
+                                        </button>
+                                    <?php else : ?>
+                                        <span class="text-muted small">-</span>
+                                    <?php endif ?>
+                                </td>
+                            </tr>
+                            <?php endforeach ?>
+                        </tbody>
+                    </table>
+                </div>
+                <?php endif ?>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- MODAL: RECARGA -->
+<div class="modal fade" id="modal-recarga" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form action="<?= $router->route('admin.cartao.recarregar', ['id' => $cartao->id]) ?>" method="POST" class="form-validate">
+                <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                <input type="hidden" name="id" value="<?= $cartao->id ?>">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="uil uil-plus-circle me-1"></i> Recarga</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <?php if (!empty($recarga_minima) && (float) $recarga_minima > 0) : ?>
+                    <div class="alert alert-info py-2 small mb-3">
+                        <i class="uil uil-info-circle me-1"></i>
+                        Recarga minima permitida: <strong>R$ <?= number_format((float) $recarga_minima, 2, ',', '.') ?></strong>
+                    </div>
+                    <?php endif ?>
+                    <div class="mb-3">
+                        <label for="recarga_valor" class="form-label">Valor <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text clean">R$</span>
+                            <input type="text"
+                                   class="form-control input-money border-start-0"
+                                   id="recarga_valor"
+                                   name="valor"
+                                   placeholder="0,00"
+                                   autocomplete="off"
+                                   required
+                                   data-min-recarga="<?= number_format((float) ($recarga_minima ?? 0), 2, '.', '') ?>">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="recarga_forma" class="form-label">Forma de pagamento</label>
+                        <select class="form-select" id="recarga_forma" name="forma_pagamento">
+                            <option value="">- Não informado -</option>
+                            <option value="pix">Pix</option>
+                            <option value="dinheiro">Dinheiro</option>
+                            <option value="credit">Cartão de Crédito</option>
+                            <option value="debit">Cartão de Débito</option>
+                            <option value="transfer">Transferência</option>
+                        </select>
+                    </div>
+                    <div class="mb-0">
+                        <label for="recarga_descricao" class="form-label">Observação</label>
+                        <textarea class="form-control" id="recarga_descricao" name="descricao" placeholder="Opcional" rows=2></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-white" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-green">
+                        <i class="uil uil-check me-1"></i> Confirmar recarga
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: LANÇAR VENDA -->
+<div class="modal fade" id="modal-lancar-venda" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form action="<?= $router->route('admin.cartao.lancar.venda', ['id' => $cartao->id]) ?>" method="POST" class="form-validate">
+                <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                <input type="hidden" name="id" value="<?= $cartao->id ?>">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="uil uil-utensils me-1"></i> Registrar Gasto</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <?php
+                        $mensagemCashback = null;
+                        $mensagemFidelidade = null;
+                        if ($regra_cashback) {
+                            if ($regra_cashback->tipo === 'PERCENTUAL') {
+                                $pct = rtrim(rtrim(number_format((float) $regra_cashback->valor, 2, ',', '.'), '0'), ',');
+                                $mensagemCashback = '<i class="uil uil-percentage me-1"></i> Cashback de <strong>' . $pct . '%</strong> sobre o valor do gasto';
+                            } else {
+                                $fixo = number_format((float) $regra_cashback->valor, 2, ',', '.');
+                                $mensagemCashback = '<i class="uil uil-money-bill me-1"></i> Cashback fixo de <strong>R$ ' . $fixo . '</strong> por gasto';
+                            }
+                        }
+                        if ($regra_fidelidade) {
+                            $rf = $regra_fidelidade;
+                            $bonus = number_format((float) $rf->valor_saldo, 2, ',', '.');
+                            $gatilhosFidelidade = [];
+                            $qtd = (int) ($rf->quantidade_vendas ?? 0);
+                            $valorMinimoVenda = (float) ($rf->valor_minimo_venda ?? 0);
+                            $valorGatilho = (float) ($rf->valor_acumulado_minimo ?? 0);
+                            $tipoValorAcumulado = strtoupper(trim((string) ($rf->tipo_valor_acumulado ?? 'CICLICO')));
+
+                            if ($qtd > 0) {
+                                $textoQtd = 'a cada <strong>' . number_format($qtd, 0, ',', '.') . '</strong> gasto' . ($qtd > 1 ? 's' : '');
+                                if ($valorMinimoVenda > 0) {
+                                    $textoQtd .= ' com valor minimo de <strong>R$ ' . moedabr($valorMinimoVenda) . '</strong>';
+                                }
+                                $gatilhosFidelidade[] = $textoQtd;
+                            }
+
+                            if ($valorGatilho > 0) {
+                                $gatilhosFidelidade[] = $tipoValorAcumulado === 'UNICO'
+                                    ? 'com <strong>R$ ' . moedabr($valorGatilho) . '</strong> acumulados em <strong>uma unica vez</strong>'
+                                    : 'a cada <strong>R$ ' . moedabr($valorGatilho) . '</strong> acumulados';
+                            }
+
+                            if (!empty($gatilhosFidelidade)) {
+                                $mensagemFidelidade = '<i class="uil uil-star me-1"></i> Bônus fidelidade de <strong>R$ '
+                                    . $bonus
+                                    . '</strong> liberado '
+                                    . implode(' OU ', $gatilhosFidelidade);
+                            }
+
+                        }
+                    ?>
+                    <?php if ($mensagemCashback) : ?>
+                    <div class="alert alert-info py-2 small mb-2">
+                        <?= $mensagemCashback ?>
+                    </div>
+                    <?php endif; ?>
+                    <?php if ($mensagemFidelidade) : ?>
+                    <div class="alert alert-info py-2 small mb-3">
+                        <?= $mensagemFidelidade ?>
+                    </div>
+                    <?php endif; ?>
+                    <?php if (!$mensagemCashback && !$mensagemFidelidade) : ?>
+                    <div class="alert alert-secondary py-2 small mb-3">
+                        <i class="uil uil-info-circle me-1"></i>
+                        Nenhuma regra de cashback ou fidelidade ativa no momento.
+                        O gasto será registrado sem créditos automáticos.
+                    </div>
+                    <?php endif ?>
+                    <div class="mb-3">
+                        <label for="venda_valor" class="form-label">Valor do gasto <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text clean">R$</span>
+                            <input type="text" class="form-control input-money border-start-0" id="venda_valor"
+                                   name="valor" placeholder="0,00" autocomplete="off" required>
+                        </div>
+                    </div>
+                    <div class="mb-0">
+                        <label for="venda_descricao" class="form-label">Observação</label>
+                        <textarea class="form-control" id="venda_descricao"
+                               name="descricao" placeholder="Ex: Mesa 7, Almoço..." rows=2></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-white" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary text-white">
+                        <i class="uil uil-check me-1"></i> Registrar gasto
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: CONSUMO -->
+<div class="modal fade" id="modal-consumo" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form action="<?= $router->route('admin.cartao.consumo', ['id' => $cartao->id]) ?>" method="POST" class="form-validate">
+                <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                <input type="hidden" name="id" value="<?= $cartao->id ?>">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="uil uil-minus-circle me-1"></i> Consumo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-1 text-muted small">
+                        Saldo disponível: <strong class="text-dark"><?= $cartao->saldo_print ?></strong>
+                    </div>
+                    <div class="mb-3 mt-3">
+                        <label for="consumo_valor" class="form-label">Valor à debitar <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text clean">R$</span>
+                            <input type="text" class="form-control input-money border-start-0" id="consumo_valor"
+                                   name="valor" placeholder="0,00" autocomplete="off" required
+                                   data-max-saldo="<?= number_format((float) ($cartao->saldo ?? 0), 2, '.', '') ?>">
+                        </div>
+                    </div>
+                    <div class="mb-0">
+                        <label for="consumo_descricao" class="form-label">Observação</label>
+                        <textarea class="form-control" id="consumo_descricao"
+                               name="descricao" placeholder="Opcional" rows=2></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-white" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="uil uil-check me-1"></i> Confirmar consumo
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: AJUSTE -->
+<div class="modal fade" id="modal-ajuste" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form action="<?= $router->route('admin.cartao.ajuste', ['id' => $cartao->id]) ?>" method="POST" class="form-validate">
+                <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                <input type="hidden" name="id" value="<?= $cartao->id ?>">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="uil uil-sliders-v-alt me-1"></i> Ajuste Manual</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="ajuste_sentido" class="form-label">Tipo de ajuste <span class="text-danger">*</span></label>
+                        <select class="form-select" id="ajuste_sentido" name="sentido" required>
+                            <option value="CREDITO">Crédito</option>
+                            <option value="DEBITO">Débito</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="ajuste_valor" class="form-label">Valor <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text clean">R$</span>
+                            <input type="text" class="form-control input-money border-start-0" id="ajuste_valor" name="valor" placeholder="0,00" autocomplete="off" required>
+                        </div>
+                    </div>
+                    <div class="mb-0">
+                        <label for="ajuste_descricao" class="form-label">Motivo <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="ajuste_descricao" name="descricao" placeholder="Informe o motivo do ajuste" rows=2 required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-white" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-secondary">
+                        <i class="uil uil-check me-1"></i> Confirmar ajuste
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: ESTORNO -->
+<div class="modal fade" id="modal-estorno" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form action="<?= $router->route('admin.cartao.estornar', ['id' => $cartao->id]) ?>" method="POST" class="form-validate">
+                <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                <input type="hidden" name="id" value="<?= $cartao->id ?>">
+                <input type="hidden" name="id_movimentacao" id="estorno_id_movimentacao" value="">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="uil uil-history-alt me-1"></i> Estornar movimentação</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning py-2 small mb-3">
+                        <div><strong>Tipo:</strong> <span id="estorno_movimentacao_tipo">-</span></div>
+                        <div><strong>Valor:</strong> <span id="estorno_movimentacao_valor">-</span></div>
+                    </div>
+                    <div class="mb-0">
+                        <label for="estorno_descricao" class="form-label">Motivo do estorno <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="estorno_descricao" name="descricao" placeholder="Informe o motivo do estorno" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-white" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="uil uil-check me-1"></i> Confirmar estorno
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var el = document.getElementById('saldo-display');
+    if (!el) return;
+
+    var target   = parseFloat(el.dataset.value) || 0;
+    var duration = 900;
+    var start    = null;
+
+    function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
+
+    function fmt(v) {
+        return 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function tick(ts) {
+        if (!start) start = ts;
+        var progress = Math.min((ts - start) / duration, 1);
+        el.textContent = fmt(target * easeOut(progress));
+        if (progress < 1) requestAnimationFrame(tick);
+    }
+
+    el.textContent = fmt(0);
+    requestAnimationFrame(tick);
+})();
+</script>
+
+<?php $this->start("endScripts") ?>
+<script>
+$(document).ready(function () {
+    var $form = $("#form-filtro-extrato");
+    var $table = $("#table-extrato-cartao");
+    var extratoTable = null;
+
+    function applyExtratoFilter() {
+        var tipoFiltro = ($("#extrato_tipo").val() || "").toString();
+        var dataInicial = ($("#extrato_data_inicial").val() || "").toString();
+        var dataFinal = ($("#extrato_data_final").val() || "").toString();
+
+        if (!$table.length) {
+            return;
+        }
+
+        $table.find("tbody tr").each(function () {
+            var $row = $(this);
+            var tipoRow = ($row.attr("data-tipo") || "").toString();
+            var dataRow = ($row.attr("data-data") || "").toString();
+            var visible = true;
+
+            if (tipoFiltro && tipoRow !== tipoFiltro) {
+                visible = false;
+            }
+
+            if (visible && dataInicial && (!dataRow || dataRow < dataInicial)) {
+                visible = false;
+            }
+
+            if (visible && dataFinal && (!dataRow || dataRow > dataFinal)) {
+                visible = false;
+            }
+
+            $row.toggle(visible);
+        });
+    }
+
+    if ($table.length && window.jQuery && $.fn.DataTable) {
+        extratoTable = $table.DataTable(window.buildDataTableOptions({
+            paging: false,
+            info: false,
+            searching: false,
+            responsive: true,
+            order: [[0, "desc"]]
+        }));
+
+        $table.on("draw.dt", function () {
+            applyExtratoFilter();
+        });
+    }
+
+    $(document).on("submit", "#form-filtro-extrato", function (e) {
+        e.preventDefault();
+        applyExtratoFilter();
+        return false;
+    });
+
+    $(document).on("click", "#btn-filtrar-extrato", function (e) {
+        e.preventDefault();
+        applyExtratoFilter();
+        return false;
+    });
+
+    $(document).on("change", "#form-filtro-extrato select, #form-filtro-extrato input[type='date']", function () {
+        applyExtratoFilter();
+    });
+
+    $(document).on("click", "#btn-limpar-filtro-extrato", function (e) {
+        e.preventDefault();
+
+        if (!$form.length) {
+            return false;
+        }
+
+        $form[0].reset();
+        applyExtratoFilter();
+
+        return false;
+    });
+
+    $(document).on("click", ".btn-estornar-movimentacao", function () {
+        var $button = $(this);
+
+        $("#estorno_id_movimentacao").val($button.data("id") || "");
+        $("#estorno_movimentacao_tipo").text($button.data("tipo") || "-");
+        $("#estorno_movimentacao_valor").text($button.data("valor") || "-");
+        $("#estorno_descricao").val("");
+    });
+
+    $.validator.addMethod('maxsaldo', function (value, element) {
+        var max = parseFloat(element.getAttribute('data-max-saldo') || '0');
+        var val = parseFloat(value.replace(/\./g, '').replace(',', '.')) || 0;
+        return val <= max;
+    }, function (params, element) {
+        var max = parseFloat(element.getAttribute('data-max-saldo') || '0');
+        return 'Saldo insuficiente. Disponível: R$ ' + max.toLocaleString('pt-BR', {
+            minimumFractionDigits: 2, maximumFractionDigits: 2
+        });
+    });
+
+    $.validator.addMethod('minrecarga', function (value, element) {
+        var min = parseFloat(element.getAttribute('data-min-recarga') || '0');
+        var val = parseFloat(String(value || '').replace(/\./g, '').replace(',', '.')) || 0;
+
+        if (min <= 0) {
+            return true;
+        }
+
+        return val >= min;
+    }, function (params, element) {
+        var min = parseFloat(element.getAttribute('data-min-recarga') || '0');
+        return 'A recarga minima permitida e de R$ ' + min.toLocaleString('pt-BR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    });
+
+    $('#recarga_valor').rules('add', { minrecarga: true });
+    $('#consumo_valor').rules('add', { maxsaldo: true });
+});
+</script>
+<?php $this->end() ?>

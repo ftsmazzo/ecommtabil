@@ -1,0 +1,93 @@
+<?php $this->layout("app/template/base"); ?>
+
+<?php $this->start("page-buttons") ?>
+    <button type="submit" form="form-cartao-config" class="btn btn-primary"><i class="uil uil-check me-1"></i>Salvar</button>
+<?php $this->end() ?>
+
+<form id="form-cartao-config" action="<?=$url_action?>" method="POST">
+    <input type="hidden" name="csrf" value="<?=$csrf?>">
+
+    <div class="row g-3">
+
+        <?php if ($permissao["cartao"]): ?>
+        <div class="col-12 col-lg-6">
+            <div class="card h-100">
+                <div class="card-header">Cartao</div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">Cliente obrigatório no cartão?</label>
+                        <select name="cartao_cliente_obrigatorio" class="form-select">
+                            <option value="1" <?=(($config["cartao_cliente_obrigatorio"] ?? "1") === "1") ? "selected" : ""?>>SIM - o cartão deve ter um cliente vinculado</option>
+                            <option value="0" <?=(($config["cartao_cliente_obrigatorio"] ?? "1") === "0") ? "selected" : ""?>>NÃO - o cartão pode existir sem cliente</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-0">
+                        <label class="form-label">Recarga Mínima</label>
+                        <div class="input-group">
+                            <span class="input-group-text input-group-addon clean">R$</span>
+                            <input type="text"
+                                   class="form-control input-money border-start-0"
+                                   name="recarga_minima"
+                                   placeholder="0,00"
+                                   value="<?=!empty($config["recarga_minima"]) ? number_format((float) $config["recarga_minima"], 2, ',', '.') : ""?>">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php endif ?>
+
+        <?php if ($permissao["saldo"]): ?>
+        <div class="col-12 col-lg-6">
+            <div class="card h-100">
+                <div class="card-header">Validade de Saldo</div>
+                <div class="card-body">
+                    <i class="text-muted small mb-3 d-block">Deixe em branco ou zero para não limitar a validade.</i>
+
+                    <div class="mb-3">
+                        <label class="form-label">Recarga expira em</label>
+                        <div class="input-group">
+                            <input type="number" min="0" step="1" class="form-control" name="recarga_expira_dias"
+                                placeholder="Sem validade"
+                                value="<?=!empty($config["recarga_expira_dias"]) ? (int) $config["recarga_expira_dias"] : ""?>">
+                            <span class="input-group-text input-group-addon addon-end clean">dias</span>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Cashback expira em</label>
+                        <div class="input-group">
+                            <input type="number" min="0" step="1" class="form-control" name="cashback_expira_dias"
+                                placeholder="Sem validade"
+                                value="<?=!empty($config["cashback_expira_dias"]) ? (int) $config["cashback_expira_dias"] : ""?>">
+                            <span class="input-group-text input-group-addon addon-end clean">dias</span>
+                        </div>
+                    </div>
+
+                    <div class="mb-0">
+                        <label class="form-label">Bônus Fidelidade expira em</label>
+                        <div class="input-group">
+                            <input type="number" min="0" step="1" class="form-control" name="fidelidade_expira_dias"
+                                placeholder="Sem validade"
+                                value="<?=!empty($config["fidelidade_expira_dias"]) ? (int) $config["fidelidade_expira_dias"] : ""?>">
+                            <span class="input-group-text input-group-addon addon-end clean">dias</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php endif ?>
+
+    </div>
+</form>
+
+<?php $this->start("endScripts") ?>
+<script>
+$("#form-cartao-config").on("submit", function () {
+    if (typeof loadingButton === "function") {
+        loadingButton($('button[form="form-cartao-config"]'));
+    }
+});
+</script>
+<?php $this->end() ?>

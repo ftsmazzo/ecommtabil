@@ -1,0 +1,62 @@
+{
+    "name": "diego/framediz",
+    "version": "1.0.0",
+    "description": "Framediz",
+    "authors": [
+        {
+            "name": "Diego Ferraz",
+            "email": "diegoaferraz@gmail.com",
+            "role": "Developer"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "App\\" : "app/"
+        },
+        "files": [
+            "public/libs/helpers.php"
+        ]
+    },
+    "repositories": [],
+    "minimum-stability": "dev",
+    "require": {
+        "psr/http-message": "^1.0",
+        "phpmailer/phpmailer": "^6.1",
+        "guzzlehttp/guzzle": "^7.0",
+        "efipay/sdk-php-apis-efi": "dev-main",
+        "coffeecode/router": "dev-master",
+        "monolog/monolog": "^2.0",
+        "smottt/wideimage": "^1.1",
+        "setasign/fpdf": "^1.8",
+        "doctrine/collections": "^1.6",
+        "nesbot/carbon": "^2.41",
+        "league/oauth2-facebook": "^2.0",
+        "league/oauth2-google": "^4.0",
+        "endroid/qr-code": "^4.4",
+        "jarouche/financial": "^2.1",
+        "respect/validation": "^2.2",
+        "firebase/php-jwt": "^6.11",
+        "league/plates": "v3.x-dev",
+        "mpdf/mpdf": "dev-development",
+        "symfony/var-dumper": "7.4.x-dev",
+        "minishlink/web-push": "dev-master",
+        "nikic/fast-route": "^2.0@beta",
+        "intervention/image": "dev-develop",
+        "phpoffice/phpspreadsheet": "dev-master",
+        "dompdf/dompdf": "dev-master",
+        "tecnickcom/tcpdf": "dev-main",
+        "openai-php/client": "dev-main"
+    },
+    "require-dev": {
+        "matthiasmullie/minify": "^1.3",
+        "filp/whoops": "^2.18"
+    },
+    "config": {
+        "platform": {
+            "php": "8.2.0"
+        },
+        "allow-plugins": {
+            "php-http/discovery": true
+        }
+    }
+}

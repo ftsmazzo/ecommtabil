@@ -1,0 +1,618 @@
+/* ==========================================================================
+   COLORS / THEME TOKENS
+   ========================================================================== */
+
+@use "sass:map";
+@use "sass:color";
+@use "sass:math";
+
+$theme-colors: (
+  "white": (
+      base: #fff,
+      on: #1f2937,
+      btn-hover: #f2f2f2,
+      btn-active: #fff,
+      btn-focus-ring: rgba(#dddfe1, 0.5),
+      outline-on: #1f2937,
+      alert-text: #797f87,
+      alert-bg: #fff,
+      alert-border: #fff,
+      alert-link: #61666c
+  ),
+
+  "indigo": (
+      base: #4f46e5,
+      on: #fff,
+      btn-hover: #3a30e2,
+      btn-active: #3f38b7,
+      btn-focus-ring: rgba(#6962e9, 0.5),
+      outline-on: #fff,
+      alert-text: #2f2a89,
+      alert-bg: #dcdafa,
+      alert-border: #cac8f7,
+      alert-link: #26226e
+  ),
+
+  "purple": (
+    base: #7c3aed,
+    on: #fff,
+    btn-hover: #6c23eb,
+    btn-active: #632ebe,
+    btn-focus-ring: rgba(#9058f0, 0.5),
+    outline-on: #fff,
+    alert-text: #4a238e,
+    alert-bg: #e5d8fb,
+    alert-border: #d8c4fa,
+    alert-link: #3b1c72
+  ),
+
+  "teal": (
+    base: #14b8a6,
+    on: #fff,
+    btn-hover: #0fa391,
+    btn-active: #0d9488,
+    btn-focus-ring: rgba(#14b8a6, 0.5),
+    outline-on: #fff,
+    alert-text: #0f5f57,
+    alert-bg: #d7f6f2,
+    alert-border: #bff0e9,
+    alert-link: #0c4c45
+  ),
+
+  "green": (
+    base: #3dc763,
+    on: #fff,
+    btn-hover: #33b658,
+    btn-active: #2eae52,
+    btn-focus-ring: rgba(#3dc763, 0.5),
+    outline-on: #fff,
+    alert-text: #237f3d,
+    alert-bg: #88ffaa,
+    alert-border: #5fef88,
+    alert-link: #1d7034
+  ),
+
+  "yellow-100": (
+    base: #ffeed6,
+    on: #1f2937,
+    btn-hover: #ffe3bd,
+    btn-active: #fff1de,
+    btn-focus-ring: rgba(#ddd0be, 0.5),
+    outline-on: #1f2937,
+    alert-text: #998f80,
+    alert-bg: #fffcf7,
+    alert-border: #fffaf3,
+    alert-link: #7a7266
+  ),
+
+  "yellow-200": (
+    base: #f5dbb8,
+    on: #1f2937,
+    btn-hover: #f2d0a2,
+    btn-active: #f7e2c6,
+    btn-focus-ring: rgba(#d5c0a5, 0.5),
+    outline-on: #1f2937,
+    alert-text: #93836e,
+    alert-bg: #fdf8f1,
+    alert-border: #fcf4ea,
+    alert-link: #766958
+  ),
+
+  "gray-50": (
+    base: #f9fafb,
+    on: #1f2937,
+    btn-hover: #eaedf1,
+    btn-active: #fafbfc,
+    btn-focus-ring: rgba(#d8dbde, 0.5),
+    outline-on: #1f2937,
+    alert-text: #767d85,
+    alert-bg: #fefefe,
+    alert-border: #fdfefe,
+    alert-link: #5e646a
+  ),
+
+  "gray-100": (
+    base: #f2f4f6,
+    on: #1f2937,
+    btn-hover: #e3e7ec,
+    btn-active: #f5f6f8,
+    btn-focus-ring: rgba(#d2d6d9, 0.5),
+    outline-on: #1f2937,
+    alert-text: #919294,
+    alert-bg: #fcfdfd,
+    alert-border: #fbfcfc,
+    alert-link: #747576
+  ),
+
+  "gray-200": (
+    base: #e5e7eb,
+    on: #1f2937,
+    btn-hover: #d7dae0,
+    btn-active: #eaecef,
+    btn-focus-ring: rgba(#c7cbd0, 0.5),
+    outline-on: #1f2937,
+    alert-text: #898b8d,
+    alert-bg: #fafafb,
+    alert-border: #f7f8f9,
+    alert-link: #6e6f71
+  ),
+
+  "gray-300": (
+    base: #d1d5db,
+    on: #1f2937,
+    btn-hover: #c3c8d0,
+    btn-active: #dadde2,
+    btn-focus-ring: rgba(#b6bbc2, 0.5),
+    outline-on: #1f2937,
+    alert-text: #7d8083,
+    alert-bg: #f6f7f8,
+    alert-border: #f1f2f4,
+    alert-link: #646669
+  ),
+
+  "gray-400": (
+    base: #9ca3af,
+    on: #1f2937,
+    btn-hover: #8e96a4,
+    btn-active: #b0b5bf,
+    btn-focus-ring: rgba(#89919d, 0.5),
+    outline-on: #1f2937,
+    alert-text: #5e6269,
+    alert-bg: #ebedef,
+    alert-border: #e1e3e7,
+    alert-link: #4b4e54
+  ),
+
+  "gray-500": (
+    base: #6b7280,
+    on: #fff,
+    btn-hover: #5f6672,
+    btn-active: #565b66,
+    btn-focus-ring: rgba(#818793, 0.5),
+    outline-on: #fff,
+    alert-text: #40444d,
+    alert-bg: #e1e3e6,
+    alert-border: #d3d5d9,
+    alert-link: #33363e
+  ),
+
+  "gray-600": (
+    base: #4b5563,
+    on: #fff,
+    btn-hover: #404954,
+    btn-active: #3c444f,
+    btn-focus-ring: rgba(#666f7a, 0.5),
+    outline-on: #fff,
+    alert-text: #2d333b,
+    alert-bg: #dbdde0,
+    alert-border: #c9ccd0,
+    alert-link: #24292f
+  ),
+
+  "gray-700": (
+    base: #374151,
+    on: #fff,
+    btn-hover: #2d3542,
+    btn-active: #2c3441,
+    btn-focus-ring: rgba(#555e6b, 0.5),
+    outline-on: #fff,
+    alert-text: #212731,
+    alert-bg: #d7d9dc,
+    alert-border: #c3c6cb,
+    alert-link: #1a1f27
+  ),
+
+  "gray-800": (
+    base: #1f2937,
+    on: #fff,
+    btn-hover: #161d27,
+    btn-active: #19212c,
+    btn-focus-ring: rgba(#414955, 0.5),
+    outline-on: #fff,
+    alert-text: #131921,
+    alert-bg: #d2d4d7,
+    alert-border: #bcbfc3,
+    alert-link: #0f141a
+  ),
+
+  "gray-900": (
+    base: #111827,
+    on: #fff,
+    btn-hover: #090d15,
+    btn-active: #0e131f,
+    btn-focus-ring: rgba(#353b47, 0.5),
+    outline-on: #fff,
+    alert-text: #0a0e17,
+    alert-bg: #cfd1d4,
+    alert-border: #b8babe,
+    alert-link: #080b12
+  )
+);
+
+/* ==========================================================================
+   FUNCTIONS
+   ========================================================================== */
+
+@function theme($name, $key) {
+  @return map.get(map.get($theme-colors, $name), $key);
+}
+
+// substitui color-yiq()
+@function color-contrast($background, $dark: #1f2937, $light: #fff) {
+  $r: color.channel($background, "red", $space: rgb);
+  $g: color.channel($background, "green", $space: rgb);
+  $b: color.channel($background, "blue", $space: rgb);
+
+  $yiq: math.div(($r * 299) + ($g * 587) + ($b * 114), 1000);
+
+  @if $yiq >= 150 {
+    @return $dark;
+  } @else {
+    @return $light;
+  }
+}
+
+/* ==========================================================================
+   MIXINS
+   ========================================================================== */
+
+@mixin generate-solid-buttons {
+  @each $name, $data in $theme-colors {
+    $base: map.get($data, base);
+    $on: map.get($data, on);
+    $hover: map.get($data, btn-hover);
+    $active: map.get($data, btn-active);
+    $focus-ring: map.get($data, btn-focus-ring);
+
+    .btn-#{$name} {
+      color: $on;
+      background-color: $base;
+      border-color: if(sass($name == "white"): map.get(map.get($theme-colors, "gray-200"), base); else: $base);
+      // box-shadow:
+      //   inset 0 1px 0 rgba(255, 255, 255, 0.15),
+      //   0 1px 1px rgba(17, 24, 39, 0.075);
+
+      &:hover {
+        color: $on;
+        background-color: $hover;
+        border-color: if(sass($name == "white"): map.get(map.get($theme-colors, "gray-300"), base); else: $hover);
+      }
+
+      &:focus,
+      .btn-check:focus + & {
+        color: $on;
+        background-color: $hover;
+        border-color: if(sass($name == "white"): map.get(map.get($theme-colors, "gray-300"), base); else: $hover);
+        // box-shadow:
+        //   inset 0 1px 0 rgba(255, 255, 255, 0.15),
+        //   0 1px 1px rgba(17, 24, 39, 0.075),
+        //   0 0 0 0.18rem $focus-ring;
+      }
+
+      &.active,
+      &:active,
+      &:disabled,
+      &.disabled,
+      .btn-check:active + &,
+      .btn-check:checked + &,
+      .show > &.dropdown-toggle {
+        color: $on !important;
+        background-color: $active !important;
+        border-color: $active !important;
+      }
+
+      &.active:focus,
+      &:active:focus,
+      .btn-check:active + &:focus,
+      .btn-check:checked + &:focus,
+      .show > &.dropdown-toggle:focus {
+        // box-shadow:
+        //   inset 0 3px 5px rgba(17, 24, 39, 0.125),
+        //   0 0 0 0.18rem $focus-ring;
+      }
+
+      &:disabled,
+      &.disabled {
+        color: $on;
+        background-color: $base;
+        border-color: if(sass($name == "white"): map.get(map.get($theme-colors, "gray-200"), base); else: $base);
+      }
+    }
+  }
+}
+
+@mixin generate-outline-buttons {
+  @each $name, $data in $theme-colors {
+    $base: map.get($data, base);
+    $on: map.get($data, outline-on);
+    $focus-ring: rgba($base, 0.5);
+
+    .btn-outline-#{$name} {
+      color: $base;
+      border-color: $base;
+
+      &:hover {
+        color: $on;
+        background-color: $base;
+        border-color: $base;
+      }
+
+      &:focus,
+      .btn-check:focus + & {
+        box-shadow: 0 0 0 0.18rem $focus-ring;
+      }
+
+      &.active,
+      &:active,
+      &.dropdown-toggle.show,
+      .btn-check:active + &,
+      .btn-check:checked + & {
+        color: $on;
+        background-color: $base;
+        border-color: $base;
+      }
+
+      &.active:focus,
+      &:active:focus,
+      &.dropdown-toggle.show:focus,
+      .btn-check:active + &:focus,
+      .btn-check:checked + &:focus {
+        box-shadow:
+          inset 0 3px 5px rgba(17, 24, 39, 0.125),
+          0 0 0 0.18rem $focus-ring;
+      }
+
+      &:disabled,
+      &.disabled {
+        color: $base;
+        background-color: transparent;
+      }
+    }
+  }
+}
+
+@mixin generate-alerts {
+  @each $name, $data in $theme-colors {
+    .alert-#{$name} {
+      color: map.get($data, alert-text);
+      background-color: map.get($data, alert-bg);
+      border-color: map.get($data, alert-border);
+    }
+
+    .alert-#{$name} .alert-link {
+      color: map.get($data, alert-link);
+    }
+  }
+}
+
+@mixin generate-links {
+  @each $name, $data in $theme-colors {
+    $base: map.get($data, base);
+    $hover: map.get($data, btn-active);
+
+    .link-#{$name} {
+      color: $base;
+    }
+
+    .link-#{$name}:focus,
+    .link-#{$name}:hover {
+      color: $hover;
+    }
+  }
+}
+
+@mixin generate-backgrounds {
+  @each $name, $data in $theme-colors {
+    .bg-#{$name} {
+      background-color: map.get($data, base) !important;
+    }
+  }
+
+  .bg-body {
+    background-color: #f2f4f6 !important;
+  }
+
+  .bg-transparent {
+    background-color: transparent !important;
+  }
+}
+
+@mixin generate-badges {
+  @each $name, $data in $theme-colors {
+    $base: map.get($data, base);
+    $text: map.get($data, alert-text);
+
+    .badge.bg-#{$name}.filled,
+    .badge.filled.bg-#{$name} {
+      background: color.mix(white, $base, 72%) !important;
+      border-color: color.mix(white, $base, 72%) !important;
+      color: $text !important;
+    }
+
+    .badge.bg-#{$name}.filled-outlined,
+    .badge.filled-outlined.bg-#{$name} {
+      background: color.mix(white, $base, 84%) !important;
+      border-color: color.mix(white, $base, 58%) !important;
+      color: $text !important;
+    }
+  }
+}
+
+@mixin generate-breadcrumbs {
+  @each $name, $data in $theme-colors {
+    $base: map.get($data, base);
+
+    .breadcrumb-#{$name} {
+      background: $base;
+    }
+
+    .breadcrumb-#{$name} .breadcrumb-item.active {
+      color: #fff;
+    }
+
+    .breadcrumb-#{$name}.breadcrumb-transparent {
+      background: 0 0;
+    }
+
+    .breadcrumb-#{$name}.breadcrumb-transparent .breadcrumb-item.active {
+      color: $base;
+    }
+  }
+
+  .breadcrumb-text-light .breadcrumb-item,
+  .breadcrumb-text-light .breadcrumb-item a {
+    color: #fff;
+  }
+
+  .breadcrumb-text-light .breadcrumb-item:before {
+    color: #fff;
+  }
+}
+
+@mixin generate-icon-shapes {
+  @each $name, $data in $theme-colors {
+    $base: map.get($data, base);
+
+    .icon-shape-#{$name} {
+      color: $base;
+      background-color: rgba($base, 0.3);
+    }
+
+    .info-bar-icon.bg-#{$name} {
+      background-color: color.mix(white, $base, 72%) !important;
+      color: map.get($data, alert-text) !important;
+    }
+  }
+}
+
+@mixin generate-modals {
+  @each $name, $data in $theme-colors {
+    $base: map.get($data, base);
+    $content-color: color-contrast($base);
+
+    .modal-#{$name} .modal-title {
+      color: $content-color;
+    }
+
+    .modal-#{$name} .modal-footer,
+    .modal-#{$name} .modal-header {
+      border-color: rgba($base, 0.075);
+    }
+
+    .modal-#{$name} .modal-content {
+      background-color: $base;
+      color: $content-color;
+    }
+
+    .modal-#{$name} .modal-content .heading {
+      color: $content-color;
+    }
+
+    .modal-#{$name} .close > span:not(.sr-only) {
+      color: #fff;
+    }
+  }
+}
+
+@mixin generate-popovers {
+  @each $name, $data in $theme-colors {
+    $base: map.get($data, base);
+    $content-color: color-contrast($base);
+
+    .popover-#{$name} {
+      background-color: $base;
+    }
+
+    .popover-#{$name} .popover-header {
+      background-color: $base;
+      color: $content-color;
+      border-color: rgba($base, 0.2);
+    }
+
+    .popover-#{$name} .popover-body {
+      color: $content-color;
+    }
+
+    .popover-#{$name}.bs-popover-auto[data-popper-placement^="top"] .arrow::after,
+    .popover-#{$name}.bs-popover-top .arrow::after {
+      border-top-color: $base;
+    }
+
+    .popover-#{$name}.bs-popover-auto[data-popper-placement^="right"] .arrow::after,
+    .popover-#{$name}.bs-popover-end .arrow::after {
+      border-right-color: $base;
+    }
+
+    .popover-#{$name}.bs-popover-auto[data-popper-placement^="bottom"] .arrow::after,
+    .popover-#{$name}.bs-popover-bottom .arrow::after {
+      border-bottom-color: $base;
+    }
+
+    .popover-#{$name}.bs-popover-auto[data-popper-placement^="left"] .arrow::after,
+    .popover-#{$name}.bs-popover-start .arrow::after {
+      border-left-color: $base;
+    }
+  }
+}
+
+@mixin generate-progress-info {
+  .progress-info {
+    @each $name, $data in $theme-colors {
+      .bg-#{$name}::after {
+        border-top-color: map.get($data, base);
+      }
+    }
+  }
+}
+
+@mixin generate-text-colors {
+  @each $name, $data in $theme-colors {
+    $base: map.get($data, base);
+
+    .text-#{$name},
+    .text-#{$name}:hover {
+      color: $base !important;
+    }
+
+    .text-#{$name} .display-1,
+    .text-#{$name} .display-2,
+    .text-#{$name} .display-3,
+    .text-#{$name} .display-4,
+    .text-#{$name} .h1,
+    .text-#{$name} .h2,
+    .text-#{$name} .h3,
+    .text-#{$name} .h4,
+    .text-#{$name} .h5,
+    .text-#{$name} .h6,
+    .text-#{$name} a:not(.btn),
+    .text-#{$name} h1,
+    .text-#{$name} h2,
+    .text-#{$name} h3,
+    .text-#{$name} h4,
+    .text-#{$name} h5,
+    .text-#{$name} h6 {
+      color: $base;
+    }
+
+    .text-#{$name} .text-muted {
+      color: rgba($base, 0.7) !important;
+    }
+  }
+}
+
+/* ==========================================================================
+   GENERATION
+   ========================================================================== */
+
+@include generate-solid-buttons;
+@include generate-outline-buttons;
+@include generate-alerts;
+@include generate-links;
+@include generate-backgrounds;
+@include generate-badges;
+@include generate-breadcrumbs;
+@include generate-icon-shapes;
+@include generate-modals;
+@include generate-popovers;
+@include generate-progress-info;
+@include generate-text-colors;

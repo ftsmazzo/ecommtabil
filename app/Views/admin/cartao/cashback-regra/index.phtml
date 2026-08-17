@@ -1,0 +1,83 @@
+<?php $this->layout("app/template/base"); ?>
+
+<?php $this->start("page-actions") ?>
+    <?php if (!empty($permissao["cartao"])): ?>
+        <a class="btn btn-white btn-sm" href="<?=$router->route("admin.cartao.index")?>"><i class="uil uil-credit-card me-1"></i>Cartões</a>
+    <?php endif ?>
+<?php $this->end() ?>
+
+<?php $this->start("page-buttons") ?>
+    <?php if ($permissao["inserir"]): ?>
+        <button type="button" class="btn btn-primary" data-modal-ajax="<?=$router->route("admin.cashback.regra.novo")?>" data-modal-target="#modal-cashback-regra" data-modal-title="Nova Regra de Cashback"><i class="fa fa-plus fa-fw"></i> Nova Regra</button>
+    <?php endif ?>
+<?php $this->end() ?>
+
+<div class="card crud-table-card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover table-sm table-datatable table-datatable-alt crud-table">
+                <thead>
+                    <tr>
+                        <th>Descrição</th>
+                        <th>Valor</th>
+                        <th>Gasto mínimo</th>
+                        <th>Período</th>
+                        <th>Ativo</th>
+                        <?php if ($permissao["editar"] || $permissao["excluir"]) : ?>
+                            <th class="text-end actions-column"></th>
+                        <?php endif ?>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($dados as $d) : ?>
+                        <tr>
+                            <td>
+                                <?php if ($permissao["editar"]): ?>
+                                    <a class="edit" href="<?=$router->route("admin.cashback.regra.editar", ["id" => $d->id])?>" data-modal-ajax="<?=$router->route("admin.cashback.regra.editar", ["id" => $d->id])?>" data-modal-target="#modal-cashback-regra" data-modal-title="Editar Regra de Cashback"><?=$d->descricao?></a>
+                                <?php else : ?>
+                                    <span><?=$d->descricao?></span>
+                                <?php endif ?>
+                            </td>
+                            <td><?=$d->valor_print?></td>
+                            <td><?=$d->minimo_print?></td>
+                            <td><?=$d->periodo_print?></td>
+                            <td><?=$d->ativo_print?></td>
+                            <?php if ($permissao["editar"] || $permissao["excluir"]) : ?>
+                                <td class="text-end actions-column">
+                                    <div class="table-actions">
+                                        <?php if ($permissao["editar"]): ?>
+                                            <button type="button" class="table-action-btn" data-tooltip="true" title="Editar" data-modal-ajax="<?=$router->route("admin.cashback.regra.editar", ["id" => $d->id])?>" data-modal-target="#modal-cashback-regra" data-modal-title="Editar Regra de Cashback"><i class="uil-edit-alt"></i></button>
+                                        <?php endif ?>
+                                        <?php if ($permissao["excluir"]): ?>
+                                            <button type="button" class="table-action-btn table-action-danger" data-tooltip="true" title="Excluir regra" onclick="Delete('cashback/regras/delete', '<?=$d->id?>')"><i class="uil uil-trash"></i></button>
+                                        <?php endif ?>
+                                    </div>
+                                </td>
+                            <?php endif ?>
+                        </tr>
+                    <?php endforeach ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modal-cashback-regra" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body"></div>
+            <div class="modal-footer mt-3">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-primary" form="form-cashback-regra"><i class="uil uil-check me-1"></i>Salvar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<?php $this->start("endScripts") ?>
+<script src="<?=asset("admin/js/cashback-regra-form.js")?>"></script>
+<?php $this->end() ?>

@@ -1,0 +1,107 @@
+<?php $this->insert("app/template/head") ?>
+<?php $isDevAssetMode = in_array(strtolower((string) app('env')), ['local', 'dev', 'sandbox', 'development'], true); ?>
+<title><?= TITLE_SITE?> <?= $tile_separator ?? "" ?> <?= $title ?? "" ?></title>
+<?php echo $this->section("head") ?>
+<?php echo $this->section("styles") ?>
+<link href="<?= asset("app/css/overrides.min.css")?>" rel="stylesheet" type="text/css" />
+<?php echo $this->section("startScripts") ?>
+</head>
+<?php $menuMode = $layout['menu'] ?? 'vertical'; ?>
+<?php $layoutSize = $layout['layout-size'] ?? 'default'; ?>
+<?php
+$contentContainer = $content_container ?? $layout['content_container'] ?? 'container-fluid';
+$allowedContentContainers = ['container', 'container-fluid', 'container-extra'];
+
+if (!in_array($contentContainer, $allowedContentContainers, true)) {
+    $contentContainer = 'container-fluid';
+}
+?>
+<body class="app-layout app-layout-<?= htmlspecialchars($menuMode) ?> app-layout-size-<?= htmlspecialchars($layoutSize) ?>" data-menu-layout="<?= htmlspecialchars($menuMode) ?>" data-layout-size="<?= htmlspecialchars($layoutSize) ?>">
+<?php $this->insert("app/template/sidebar", [
+    'sidebarClasses' => $menuMode === 'horizontal' ? 'app-sidebar-mobile-only' : '',
+]) ?>
+<?php if ($menuMode === 'horizontal') : ?>
+    <?php $this->insert("app/template/horizontal-header") ?>
+<?php endif; ?>
+<main class="app-main">
+    <?php $this->insert("app/template/topbar", [
+        'topbarClasses' => $menuMode === 'horizontal' ? 'd-lg-none' : '',
+    ]) ?>
+    <div class="content">
+        <div class="<?= htmlspecialchars($contentContainer) ?>">
+            <?php
+                $this->insert("app/template/page-header", [
+                    "pageActions" => $this->section("page-actions")
+                ]);
+            ?>
+            <div id="wrapper">
+                <div class="main__content">
+                    <?php flash() ?>
+                    <?php
+                        $this->insert("app/template/page-buttons", [
+                            "pageButtons" => $this->section("page-buttons")
+                        ]);
+                    ?>
+                    <?php echo $this->section("content") ?>
+                </div> <!-- main__content -->
+            </div> <!-- wrapper -->
+        </div>
+    </div> <!-- content -->
+</main>
+
+<script type="module" src="https://ka-f.webawesome.com/webawesome@3.5.0/webawesome.loader.js"></script>
+<script src="<?=asset("app/js/util.min.js")?>"></script>
+<script>
+if (!window.jQuery || !window.bootstrap || typeof window.Notyf === "undefined") {
+    document.write('<script src="<?=asset("dist/bootstrap/js/bootstrap.bundle.min.js")?>"><\/script>');
+    document.write('<script src="<?=asset("dist/jquery/jquery.3.7.1.min.js")?>"><\/script>');
+    document.write('<script src="<?=asset("dist/datatables/js/jquery.dataTables.min.js")?>"><\/script>');
+    document.write('<script src="<?=asset("dist/datatables/js/dataTables.bootstrap5.js")?>"><\/script>');
+    document.write('<script src="<?=asset("dist/validate/jquery.validate.1.19.5.js")?>"><\/script>');
+    document.write('<script src="<?=asset("dist/validate/additional-methods.js")?>"><\/script>');
+    document.write('<script src="<?=asset("dist/validate/localization/messages_pt_BR.js")?>"><\/script>');
+    document.write('<script src="<?=asset("dist/webpush/webpush-register.js")?>"><\/script>');
+    document.write('<script src="<?=asset("dist/toastr/toastr.min.js")?>"><\/script>');
+    document.write('<script src="<?=asset("dist/notyf/notyf.min.js")?>"><\/script>');
+    document.write('<script src="<?=asset("dist/tabulator/js/tabulator.min.js")?>"><\/script>');
+    document.write('<script src="<?=asset("dist/simplebar/simplebar.min.js")?>"><\/script>');
+    document.write('<script src="<?=asset("dist/jquery-confirm/js/jquery-confirm.js")?>"><\/script>');
+    document.write('<script src="<?=asset("dist/mask/jquery.mask.js")?>"><\/script>');
+}
+</script>
+<?php if ($isDevAssetMode) : ?>
+<script src="<?=asset("app/scripts/app.js")?>"></script>
+<script src="<?=asset("app/scripts/helpers.js")?>"></script>
+<script src="<?=asset("app/scripts/util.js")?>"></script>
+<script src="<?=asset("app/scripts/forms.js")?>"></script>
+<?php else : ?>
+<script src="<?=asset("app/js/app.min.js")?>"></script>
+<?php endif; ?>
+<?php if (!empty($push_public_key) && !empty($user->token)) : ?>
+<script>
+window.webPushTopbarConfig = {
+    publicKey: "<?= htmlspecialchars($push_public_key, ENT_QUOTES, 'UTF-8') ?>",
+    userToken: "<?= htmlspecialchars($user->token, ENT_QUOTES, 'UTF-8') ?>",
+    endpoints: {
+        save: "<?= URL_BASE ?>/notificacoes/webpush/subscription-save",
+        delete: "<?= URL_BASE ?>/notificacoes/webpush/subscription-delete"
+    }
+};
+</script>
+<script src="<?=asset("dist/webpush/webpush.js")?>"></script>
+<script src="<?=asset("admin/js/topbar-webpush.js")?>"></script>
+<?php endif ?>
+<script src="<?=asset($layout["custom-js"])?>"></script>
+<script>
+const app = {
+    base: "<?php echo URL_BASE ?>",
+};
+$(document).ready(function() {
+    activeMenu("<?=$active_menu ?? ""?>");
+    uppers("<?=$uppers ?? ""?>");
+    requireds("<?=$required ?? ""?>");
+});
+</script>
+<?php echo $this->section("endScripts") ?>
+</body>
+</html>

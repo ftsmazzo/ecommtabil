@@ -1,0 +1,153 @@
+<?php $this->layout("app/template/base"); ?>
+
+<?php $this->start("page-buttons") ?>
+    <a class="btn btn-light" href="<?=$router->route("admin.cartao.index")?>"><i class="uil uil-arrow-left me-1"></i> Voltar para Cartões</a>
+<?php $this->end() ?>
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header py-3"><strong>Top 5 Gastos</strong></div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Cartão</th>
+                                <th>Cliente</th>
+                                <th class="text-end">Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if (!empty($top_gastos)) : ?>
+                                <?php foreach ($top_gastos as $idx => $item) : ?>
+                                    <tr>
+                                        <td><?=($idx + 1)?></td>
+                                        <td><a class="fw-semibold text-reset text-decoration-none" href="<?=$item->hub_url?>"><?=$item->codigo_print?></a></td>
+                                        <td><?=$item->cliente_print?><?php if (!empty($item->id_cliente)) : ?> <small class="text-muted">(#<?=$item->id_cliente?>)</small><?php endif; ?></td>
+                                        <td class="text-end"><?=$item->total_gasto_print?></td>
+                                    </tr>
+                                <?php endforeach ?>
+                            <?php else : ?>
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-3">Nenhum gasto encontrado.</td>
+                                </tr>
+                            <?php endif ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header py-3"><strong>Top 5 Saldo</strong></div>
+            <div class="card-body p-0">
+                <?php if (!empty($todos_saldos_zerados)) : ?>
+                    <div class="alert alert-warning rounded-0 border-0 border-bottom mb-0 py-2 small">
+                        Todos os cartões listados estão com saldo zerado no momento.
+                    </div>
+                <?php endif; ?>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Cartão</th>
+                                <th>Cliente</th>
+                                <th class="text-end">Saldo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach (($top_saldo ?? []) as $idx => $item) : ?>
+                                <tr>
+                                    <td><?=($idx + 1)?></td>
+                                    <td><a class="fw-semibold text-reset text-decoration-none" href="<?=$item->hub_url?>"><?=$item->codigo_print?></a></td>
+                                    <td><?=$item->cliente_print?><?php if (!empty($item->id_cliente)) : ?> <small class="text-muted">(#<?=$item->id_cliente?>)</small><?php endif; ?></td>
+                                    <td class="text-end"><?=$item->saldo_print?></td>
+                                </tr>
+                            <?php endforeach ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header py-3"><strong>Top 5 Recargas</strong></div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Cartão</th>
+                                <th>Cliente</th>
+                                <th class="text-end">Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if (!empty($top_recargas)) : ?>
+                                <?php foreach ($top_recargas as $idx => $item) : ?>
+                                    <tr>
+                                        <td><?=($idx + 1)?></td>
+                                        <td><a class="fw-semibold text-reset text-decoration-none" href="<?=$item->hub_url?>"><?=$item->codigo_print?></a></td>
+                                        <td><?=$item->cliente_print?><?php if (!empty($item->id_cliente)) : ?> <small class="text-muted">(#<?=$item->id_cliente?>)</small><?php endif; ?></td>
+                                        <td class="text-end"><?=$item->recarga_total_print?></td>
+                                    </tr>
+                                <?php endforeach ?>
+                            <?php else : ?>
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-3">Nenhuma recarga encontrada.</td>
+                                </tr>
+                            <?php endif ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header py-3"><strong>Top 5 Mais Beneficiado</strong></div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Cartão</th>
+                                <th>Cliente</th>
+                                <th class="text-end">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if (!empty($top_beneficiado)) : ?>
+                                <?php foreach ($top_beneficiado as $idx => $item) : ?>
+                                    <tr>
+                                        <td><?=($idx + 1)?></td>
+                                        <td>
+                                            <a class="fw-semibold text-reset text-decoration-none" href="<?=$item->hub_url?>"><?=$item->codigo_print?></a>
+                                            <small class="d-block text-muted">
+                                                <span title="Cashback">CB</span> <?=$item->cashback_print?> |
+                                                <span title="Fidelidade">FD</span> <?=$item->fidelidade_print?>
+                                            </small>
+                                        </td>
+                                        <td><?=$item->cliente_print?><?php if (!empty($item->id_cliente)) : ?> <small class="text-muted">(#<?=$item->id_cliente?>)</small><?php endif; ?></td>
+                                        <td class="text-end"><?=$item->beneficio_total_print?></td>
+                                    </tr>
+                                <?php endforeach ?>
+                            <?php else : ?>
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-3">Nenhum benefício concedido até agora.</td>
+                                </tr>
+                            <?php endif ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

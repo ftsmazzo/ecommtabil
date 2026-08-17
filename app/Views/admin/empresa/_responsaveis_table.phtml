@@ -1,0 +1,59 @@
+<?php if (empty($responsaveis)) : ?>
+    <div class="text-center text-muted py-4">
+        <i class="uil uil-user-circle fs-2 d-block mb-1"></i>
+        Nenhum responsável cadastrado.
+    </div>
+<?php else : ?>
+    <div class="table-responsive">
+        <table class="table table-hover table-sm mb-0 crud-table">
+            <thead>
+                <tr>
+                    <th>Nome</th>
+                    <th>CPF</th>
+                    <th>Função</th>
+                    <th>Celular</th>
+                    <th>E-mail</th>
+                    <?php if ($permissao["editar"] || $permissao["excluir"]) : ?>
+                        <th class="text-end actions-column"></th>
+                    <?php endif ?>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($responsaveis as $r) : ?>
+                    <tr data-responsavel-id="<?=$r->hash?>">
+                        <td><?=htmlspecialchars($r->nome, ENT_QUOTES)?></td>
+                        <td><?= $r->cpf ? cpf($r->cpf) : "—" ?></td>
+                        <td><?= $r->funcao ? htmlspecialchars($r->funcao, ENT_QUOTES) : "—" ?></td>
+                        <td><?= $r->celular ? phone($r->celular) : "—" ?></td>
+                        <td>
+                            <?php if ($r->email) : ?>
+                                <a href="mailto:<?=htmlspecialchars($r->email, ENT_QUOTES)?>"><?=htmlspecialchars($r->email, ENT_QUOTES)?></a>
+                            <?php else : ?>
+                                —
+                            <?php endif ?>
+                        </td>
+                        <?php if ($permissao["editar"] || $permissao["excluir"]) : ?>
+                            <td class="text-end actions-column">
+                                <div class="table-actions">
+                                    <?php if ($permissao["editar"]): ?>
+                                        <button type="button" class="table-action-btn" data-tooltip="true" title="Editar"
+                                            data-modal-ajax="<?=$router->route("admin.empresa.responsavel.editar", ["id" => $r->hash])?>"
+                                            data-modal-target="#modal-empresa-responsavel"
+                                            data-modal-title="Editar Responsável">
+                                            <i class="uil-edit-alt"></i>
+                                        </button>
+                                    <?php endif ?>
+                                    <?php if ($permissao["excluir"]): ?>
+                                        <button type="button" class="table-action-btn table-action-danger btn-delete-responsavel" data-tooltip="true" title="Excluir" data-id="<?=$r->hash?>">
+                                            <i class="uil uil-trash"></i>
+                                        </button>
+                                    <?php endif ?>
+                                </div>
+                            </td>
+                        <?php endif ?>
+                    </tr>
+                <?php endforeach ?>
+            </tbody>
+        </table>
+    </div>
+<?php endif ?>

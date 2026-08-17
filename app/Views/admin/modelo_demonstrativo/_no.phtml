@@ -1,0 +1,38 @@
+<?php foreach ($nos as $no) : ?>
+    <?php $filhos = $arvore[$no->id] ?? []; ?>
+    <li class="dre-no dre-no--<?=$no->tipo?>" data-tipo="<?=$no->tipo?>" data-id="<?=$no->id?>">
+        <div class="dre-no-linha">
+            <span class="dre-no-handle"><i class="uil uil-draggabledots"></i></span>
+            <span class="dre-no-igual<?=$no->tipo !== "totalizador" ? " d-none" : ""?>">=</span>
+            <input type="text" class="form-control form-control-sm dre-no-nome<?=$no->tipo === "conta" ? " d-none" : ""?>" value="<?=htmlspecialchars($no->nome, ENT_QUOTES, "UTF-8")?>" placeholder="Nome">
+            <select class="form-select form-select-sm dre-no-select-conta<?=$no->tipo !== "conta" ? " d-none" : ""?>">
+                <option value="">— Selecione uma conta —</option>
+                <?php if ($no->conta) : ?>
+                    <?php $rotulo = $no->conta->natureza === "aumenta" ? "A" : "D"; ?>
+                    <option value="<?=$no->conta->id?>" selected>
+                        <?=htmlspecialchars($no->conta->nome, ENT_QUOTES, "UTF-8")?> (<?=$rotulo?>)
+                    </option>
+                <?php endif ?>
+            </select>
+            <select class="form-select form-select-sm dre-no-tipo-select">
+                <option value="organizador" <?=$no->tipo === "organizador" ? "selected" : ""?>>Organizador</option>
+                <option value="conta" <?=$no->tipo === "conta" ? "selected" : ""?>>Plano de Contas</option>
+                <option value="totalizador" <?=$no->tipo === "totalizador" ? "selected" : ""?>>Totalizador</option>
+            </select>
+            <button type="button" class="btn btn-sm btn-outline-secondary dre-no-add-filho<?=$no->tipo !== "organizador" ? " d-none" : ""?>" title="Adicionar item">
+                <i class="uil uil-plus"></i>
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-danger dre-no-remove" title="Remover">
+                <i class="uil uil-times"></i>
+            </button>
+        </div>
+        <ul class="dre-no-filhos">
+            <?php if (!empty($filhos)) : ?>
+                <?php $this->insert("admin/modelo_demonstrativo/_no", [
+                    "nos"    => $filhos,
+                    "arvore" => $arvore,
+                ]) ?>
+            <?php endif ?>
+        </ul>
+    </li>
+<?php endforeach ?>

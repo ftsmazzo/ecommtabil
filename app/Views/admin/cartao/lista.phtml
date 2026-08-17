@@ -1,0 +1,65 @@
+<?php $this->layout("app/template/base"); ?>
+
+<?php $this->start("page-actions") ?>
+<?php $this->end() ?>
+
+<?php $this->start("page-buttons") ?>
+    <?php if (!empty($permissao["inserir"])): ?>
+        <a class="btn btn-primary" href="<?=$router->route("admin.cartao.novo")?>"><i class="uil uil-plus me-1"></i> Adicionar Cartão</a>
+    <?php endif ?>
+<?php $this->end() ?>
+
+<div class="card crud-table-card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover table-sm table-datatable table-datatable-alt crud-table">
+                <thead>
+                    <tr>
+                        <th>Cliente</th>
+                        <th>Código</th>
+                        <th>Token NFC</th>
+                        <th>Status</th>
+                        <th>Saldo</th>
+                        <th>Validade</th>
+                        <th>Ativado</th>
+                        <th>Bloqueado</th>
+                        <?php if (allow("cartao_gerenciar") || allow("cartao_editar")): ?>
+                            <th class="text-end actions-column"></th>
+                        <?php endif ?>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($dados as $d) : ?>
+                        <tr data-id="<?=$d->id?>">
+                            <td>
+                                <div class="cell-title">
+                                    <span><?=$d->cliente_print?></span>
+                                    <small><?=$d->cliente_doc_print?></small>
+                                </div>
+                            </td>
+                            <td><a class="text-nowrap fw-bold text-reset text-decoration-none" href="<?=$router->route("admin.cartao.hub", ["id" => $d->id])?>"><?=$d->codigo_print?></a></td>
+                            <td><small class="text-nowrap text-muted"><?=htmlspecialchars($d->token_nfc ?? '', ENT_QUOTES, 'UTF-8') ?: '-'?></small></td>
+                            <td><?=$d->status_print?></td>
+                            <td><?=$d->saldo_print?></td>
+                            <td><?=$d->validade_print?></td>
+                            <td><?=$d->ativacao_print?></td>
+                            <td><?=$d->bloqueio_print?></td>
+                            <?php if (allow("cartao_gerenciar") || allow("cartao_editar")): ?>
+                                <td class="text-end actions-column">
+                                    <div class="table-actions">
+                                        <?php if (allow("cartao_editar")): ?>
+                                            <a class="table-action-btn" data-tooltip="true" title="Editar cartão" href="<?=$router->route("admin.cartao.editar", ["id" => $d->id])?>"><i class="uil uil-edit-alt"></i></a>
+                                        <?php endif ?>
+                                        <?php if (allow("cartao_gerenciar")): ?>
+                                            <a class="table-action-btn" data-tooltip="true" title="Abrir Detalhe" href="<?=$router->route("admin.cartao.hub", ["id" => $d->id])?>"><i class="uil uil-eye"></i></a>
+                                        <?php endif ?>
+                                    </div>
+                                </td>
+                            <?php endif ?>
+                        </tr>
+                    <?php endforeach ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

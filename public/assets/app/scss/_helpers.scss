@@ -1,0 +1,55 @@
+@use "sass:map";
+@use "sass:meta";
+@use "sass:math";
+@use "sass:string";
+
+/* Breakpoints */
+$breakpoints: (
+    'sm': 576px,
+    'md': 768px,
+    'lg': 992px,
+    'xl': 1200px,
+    'xxl': 1400px,
+    'xxxl': 1600px,
+) !default;
+
+/* breakpoint() aceita:
+   - nome (ex: md)
+   - numero (ex: 800)
+   - string com unidade (ex: 800px ou 50rem)
+*/
+@mixin breakpoint($value) {
+    $query-value: null;
+
+    // Caso seja um breakpoint nomeado
+    @if map.has-key($breakpoints, $value) {
+        $query-value: map.get($breakpoints, $value);
+
+    // Caso seja um numero sem unidade
+    } @else if meta.type-of($value) == 'number' and math.is-unitless($value) {
+        $query-value: $value * 1px;
+
+    // Caso seja uma string com unidade
+    } @else if meta.type-of($value) == 'string' {
+        @if string.slice($value, -2) == 'px' or string.slice($value, -2) == 'em' or string.slice($value, -3) == 'rem' {
+            $query-value: string.unquote($value);
+        } @else {
+            @warn "Unidade invalida em `#{$value}`. Use px, rem ou em.";
+        }
+
+    } @else {
+        @warn "Valor invalido para breakpoint(): #{$value}.";
+    }
+
+    @if $query-value {
+        @media (min-width: #{$query-value}) {
+            @content;
+        }
+    }
+}
+
+@mixin respond-to($breakpoint) {
+    @include breakpoint($breakpoint) {
+        @content;
+    }
+}

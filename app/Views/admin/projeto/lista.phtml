@@ -1,0 +1,161 @@
+<?php $this->layout("app/template/base"); ?>
+
+<?php $this->start("styles") ?>
+<link rel="stylesheet" href="<?=asset("dist/bootstrap-select/bootstrap-select.min.css")?>">
+<?php $this->end() ?>
+
+<?php $this->start("page-buttons") ?>
+    <?php if ($permissao["inserir"]): ?>
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modal-novo-projeto">
+            <i class="fa fa-plus fa-fw"></i> Novo Projeto
+        </button>
+    <?php endif ?>
+<?php $this->end() ?>
+
+<div class="card crud-table-card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover table-sm table-datatable crud-table">
+                <thead>
+                    <tr>
+                        <th>Empresa</th>
+                        <th>Projeto</th>
+                        <th>Descrição</th>
+                        <th class="text-end actions-column"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($dados as $d): ?>
+                        <tr style="cursor:pointer" onclick="window.location='<?=$d->abrir_url?>'">
+                            <td><?=htmlspecialchars($d->empresa_print, ENT_QUOTES, "UTF-8")?></td>
+                            <td><?=htmlspecialchars($d->nome ?? "-", ENT_QUOTES, "UTF-8")?></td>
+                            <td><?=htmlspecialchars($d->descricao ?? "", ENT_QUOTES, "UTF-8")?></td>
+                            <td class="text-end actions-column" onclick="event.stopPropagation()">
+                                <div class="table-actions">
+                                    <?php if ($permissao["editar"]): ?>
+                                        <button type="button" class="table-action-btn" data-tooltip="true" title="Editar projeto"
+                                            data-bs-toggle="modal" data-bs-target="#modal-editar-projeto"
+                                            data-id="<?=$d->id?>"
+                                            data-nome="<?=htmlspecialchars($d->nome ?? "", ENT_QUOTES, "UTF-8")?>"
+                                            data-descricao="<?=htmlspecialchars($d->descricao ?? "", ENT_QUOTES, "UTF-8")?>"
+                                            data-id-empresa="<?=(int)$d->id_empresa?>">
+                                            <i class="uil-edit-alt"></i>
+                                        </button>
+                                    <?php endif ?>
+                                    <?php if ($permissao["excluir"]): ?>
+                                        <button type="button" class="table-action-btn table-action-danger" <?=$d->disabled?> <?php if (empty($d->disabled)): ?>data-tooltip="true"<?php endif ?> title="<?=$d->title?>" <?=$d->action?>><i class="uil uil-trash"></i></button>
+                                    <?php endif ?>
+                                </div>
+                            </td>
+                        </tr>
+                    <?php endforeach ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<?php if ($permissao["editar"]): ?>
+<div class="modal fade" id="modal-editar-projeto" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form id="form-editar-projeto" action="<?=$router->route("admin.projeto.update")?>" method="POST">
+                <input type="hidden" name="csrf" value="<?=$csrf?>">
+                <input type="hidden" name="id" id="edit-id">
+                <div class="modal-header">
+                    <h5 class="modal-title">Editar Projeto</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="edit-id-empresa" class="form-label">Empresa <span class="text-danger">*</span></label>
+                        <select name="id_empresa" id="edit-id-empresa" class="form-control selectpicker" data-live-search="true" data-live-search-normalize="true" required>
+                            <option value="">Selecione a empresa...</option>
+                            <?php foreach ($empresas as $empresa): ?>
+                                <?php
+                                    $razao = trim((string) ($empresa->razao ?: $empresa->nome));
+                                    $doc   = trim((string) ($empresa->documento ?? ""));
+                                    $label = $razao . ($doc ? " — " . $doc : "");
+                                ?>
+                                <option value="<?=$empresa->id?>"><?=htmlspecialchars($label, ENT_QUOTES, "UTF-8")?></option>
+                            <?php endforeach ?>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit-nome" class="form-label">Nome do Projeto <span class="text-muted small">(opcional)</span></label>
+                        <input type="text" class="form-control" id="edit-nome" name="nome" placeholder="Nome do projeto" autocomplete="off">
+                    </div>
+                    <div class="mb-0">
+                        <label for="edit-descricao" class="form-label">Descrição <span class="text-muted small">(opcional)</span></label>
+                        <textarea class="form-control" id="edit-descricao" name="descricao" rows="3" placeholder="Descrição do projeto"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary"><i class="uil uil-check me-1"></i>Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endif ?>
+
+<?php if ($permissao["inserir"]): ?>
+<div class="modal fade" id="modal-novo-projeto" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form id="form-novo-projeto" action="<?=$router->route("admin.projeto.insert")?>" method="POST">
+                <input type="hidden" name="csrf" value="<?=$csrf?>">
+                <div class="modal-header">
+                    <h5 class="modal-title">Novo Projeto</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="id_empresa" class="form-label">Empresa <span class="text-danger">*</span></label>
+                        <select name="id_empresa" id="id_empresa" class="form-control selectpicker" data-live-search="true" data-live-search-normalize="true" data-width="100%" required>
+                            <option value="">Selecione a empresa...</option>
+                            <?php foreach ($empresas as $empresa): ?>
+                                <?php
+                                    $razao = trim((string) ($empresa->razao ?: $empresa->nome));
+                                    $doc   = trim((string) ($empresa->documento ?? ""));
+                                    $label = $razao . ($doc ? " — " . $doc : "");
+                                ?>
+                                <option value="<?=$empresa->id?>"><?=htmlspecialchars($label, ENT_QUOTES, "UTF-8")?></option>
+                            <?php endforeach ?>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="nome" class="form-label">Nome do Projeto <span class="text-muted small">(opcional)</span></label>
+                        <input type="text" class="form-control" id="nome" name="nome" placeholder="Nome do projeto" autocomplete="off">
+                    </div>
+                    <div class="mb-0">
+                        <label for="descricao" class="form-label">Descrição <span class="text-muted small">(opcional)</span></label>
+                        <textarea class="form-control" id="descricao" name="descricao" rows="3" placeholder="Descrição do projeto"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" form="form-novo-projeto"><i class="uil uil-check me-1"></i>Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endif ?>
+
+<?php $this->start("endScripts") ?>
+<script src="<?=asset("dist/bootstrap-select/bootstrap-select.min.js")?>"></script>
+<script src="<?=asset("dist/bootstrap-select/defaults-pt_BR.min.js")?>"></script>
+<script>
+document.getElementById('modal-editar-projeto')?.addEventListener('show.bs.modal', function (e) {
+    var btn = e.relatedTarget;
+    document.getElementById('edit-id').value         = btn.dataset.id;
+    document.getElementById('edit-nome').value        = btn.dataset.nome;
+    document.getElementById('edit-descricao').value   = btn.dataset.descricao;
+    var sel = document.getElementById('edit-id-empresa');
+    sel.value = btn.dataset.idEmpresa;
+    if (window.jQuery) $(sel).selectpicker('val', btn.dataset.idEmpresa);
+});
+</script>
+<?php $this->end() ?>

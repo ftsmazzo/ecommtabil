@@ -1,0 +1,58 @@
+<?php if (empty($historico)) : ?>
+    <div class="text-center text-muted py-4">
+        <i class="uil uil-chart-line fs-2 d-block mb-1"></i>
+        Nenhum registro de histórico cadastrado.
+    </div>
+<?php else : ?>
+    <div class="table-responsive">
+        <table class="table table-hover table-sm mb-0 crud-table">
+            <thead>
+                <tr>
+                    <th>Data de Referência</th>
+                    <th>Valor</th>
+                    <th>Fonte</th>
+                    <th>Observação</th>
+                    <?php if ($permissao["editar"] || $permissao["excluir"]) : ?>
+                        <th class="text-end actions-column"></th>
+                    <?php endif ?>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($historico as $h) : ?>
+                    <tr data-historico-id="<?=$h->hash?>">
+                        <td><?=date("d/m/Y", strtotime($h->data_referencia))?></td>
+                        <td>
+                            <?php if (!empty($indice->unidade)) : ?>
+                                <small class="text-muted me-1"><?=htmlspecialchars($indice->unidade, ENT_QUOTES)?></small>
+                            <?php endif ?>
+                            <?=number_format((float)$h->valor, 6, ",", ".")?>
+                        </td>
+                        <td><?= $h->fonte ? htmlspecialchars($h->fonte, ENT_QUOTES) : "—" ?></td>
+                        <td class="text-truncate" style="max-width:200px;" title="<?= htmlspecialchars((string)($h->observacao ?? ""), ENT_QUOTES) ?>">
+                            <?= $h->observacao ? htmlspecialchars($h->observacao, ENT_QUOTES) : "—" ?>
+                        </td>
+                        <?php if ($permissao["editar"] || $permissao["excluir"]) : ?>
+                            <td class="text-end actions-column">
+                                <div class="table-actions">
+                                    <?php if ($permissao["editar"]): ?>
+                                        <button type="button" class="table-action-btn" data-tooltip="true" title="Editar"
+                                            data-modal-ajax="<?=$router->route("admin.indice.financeiro.historico.editar", ["id" => $h->hash])?>"
+                                            data-modal-target="#modal-indice-historico"
+                                            data-modal-title="Editar Registro">
+                                            <i class="uil-edit-alt"></i>
+                                        </button>
+                                    <?php endif ?>
+                                    <?php if ($permissao["excluir"]): ?>
+                                        <button type="button" class="table-action-btn table-action-danger btn-delete-historico" data-tooltip="true" title="Excluir" data-id="<?=$h->hash?>">
+                                            <i class="uil uil-trash"></i>
+                                        </button>
+                                    <?php endif ?>
+                                </div>
+                            </td>
+                        <?php endif ?>
+                    </tr>
+                <?php endforeach ?>
+            </tbody>
+        </table>
+    </div>
+<?php endif ?>

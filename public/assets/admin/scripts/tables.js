@@ -1,0 +1,5 @@
+// document.addEventListener("DOMContentLoaded", function () {
+//     const table = DefaultTable.init("#tabela-usuarios");
+//     DefaultTable.bindGlobalSearch(table, "#filtro-global");
+//     DefaultTable.bindCounter(table, "#tabela-info");
+// });

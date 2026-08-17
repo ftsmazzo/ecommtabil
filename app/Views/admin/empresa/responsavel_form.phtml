@@ -1,0 +1,40 @@
+<form id="form-empresa-responsavel" class="form-validate" action="<?=$url_action?>" method="POST">
+    <input type="hidden" name="csrf" value="<?=$csrf?>">
+    <?php if (!empty($responsavel->id)) : ?>
+        <input type="hidden" name="id" value="<?=$responsavel->hash()?>">
+    <?php else : ?>
+        <input type="hidden" name="id_empresa" value="<?=$empresa->hash()?>">
+    <?php endif ?>
+
+    <div class="row">
+        <div class="col-12 col-sm-8 mb-3">
+            <label for="er-nome" class="form-label" title="Campo Obrigatório">Nome <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="er-nome" name="nome" required value="<?=htmlspecialchars($responsavel->nome ?? "", ENT_QUOTES)?>">
+        </div>
+        <div class="col-12 col-sm-4 mb-3">
+            <label for="er-cpf" class="form-label">CPF</label>
+            <input type="text" class="form-control input-cpf" id="er-cpf" name="cpf" placeholder="000.000.000-00" value="<?= !empty($responsavel->cpf) ? cpf($responsavel->cpf) : "" ?>">
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12 col-sm-6 mb-3">
+            <label for="er-funcao" class="form-label">Função</label>
+            <input type="text" class="form-control" id="er-funcao" name="funcao" placeholder="Ex: Sócio, Diretor, Gerente..." value="<?=htmlspecialchars($responsavel->funcao ?? "", ENT_QUOTES)?>">
+        </div>
+        <div class="col-12 col-sm-6 mb-3">
+            <label for="er-celular" class="form-label">Celular</label>
+            <input type="text" class="form-control input-phone" id="er-celular" name="celular" placeholder="(00) 00000-0000" value="<?= htmlspecialchars($responsavel->celular ?? "", ENT_QUOTES) ?>">
+        </div>
+    </div>
+
+    <div class="mb-3">
+        <label for="er-email" class="form-label">E-mail</label>
+        <input type="email" class="form-control" id="er-email" name="email" placeholder="exemplo@email.com" value="<?=htmlspecialchars($responsavel->email ?? "", ENT_QUOTES)?>">
+    </div>
+
+    <div class="mb-0">
+        <label for="er-endereco" class="form-label">Endereço</label>
+        <input type="text" class="form-control" id="er-endereco" name="endereco" placeholder="Rua, número, bairro, cidade..." value="<?=htmlspecialchars($responsavel->endereco ?? "", ENT_QUOTES)?>">
+    </div>
+</form>

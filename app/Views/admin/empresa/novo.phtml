@@ -1,0 +1,27 @@
+<?php $this->layout("app/template/base"); ?>
+
+<?php $this->start("styles") ?>
+<link rel="stylesheet" href="<?=asset("dist/bootstrap-select/bootstrap-select.min.css")?>">
+<?php $this->end() ?>
+
+<?php $this->start("endScripts") ?>
+<script src="<?=asset("dist/bootstrap-select/bootstrap-select.min.js")?>"></script>
+<script src="<?=asset("dist/bootstrap-select/defaults-pt_BR.min.js")?>"></script>
+<script>
+window.empresaFormConfig = {
+    findUrl: "<?=$router->route("admin.empresa.find")?>",
+    estados: <?=json_encode($estados_br ?? [], JSON_UNESCAPED_UNICODE)?>
+};
+</script>
+<script src="<?=asset("admin/js/empresa-form.js")?>"></script>
+<?php $this->end() ?>
+
+<form id="form-empresa-novo" class="form-validate" action="<?=$router->route("admin.empresa.insert")?>" method="POST">
+    <input type="hidden" name="csrf" value="<?=$csrf?>">
+    <?php
+        $this->insert("admin/empresa/_form", [
+            "clientes" => $clientes,
+            "empresa" => false,
+            "url_back" => $url_back
+        ]) ?>
+</form>

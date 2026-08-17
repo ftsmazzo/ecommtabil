@@ -1,0 +1,22 @@
+<?php if (empty($layout['show_notifications'])) : return; endif; ?>
+<?php
+$notificationItemClasses = $notificationItemClasses ?? 'nav-item dropdown';
+$notificationLinkClasses = $notificationLinkClasses ?? 'nav-link text-secondary notification-bell unread dropdown-toggle';
+$notificationDropdownClasses = $notificationDropdownClasses ?? 'dropdown-menu dropdown-menu-lg dropdown-menu-center mt-2 py-0';
+?>
+
+<li class="<?= htmlspecialchars($notificationItemClasses) ?>">
+    <a class="<?= htmlspecialchars($notificationLinkClasses) ?>"
+       data-unread-notifications="true"
+       href="#"
+       role="button"
+       data-bs-toggle="dropdown"
+       data-bs-display="static"
+       aria-expanded="false">
+        <i class="uil uil-bell"></i>
+    </a>
+
+    <div class="<?= htmlspecialchars($notificationDropdownClasses) ?>">
+        <?php $this->insert("app/template/notificacoes") ?>
+    </div>
+</li>

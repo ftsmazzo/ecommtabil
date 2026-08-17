@@ -1,0 +1,41 @@
+<form id="form-banco" class="form-validate" action="<?=$url_action?>" method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="csrf" value="<?=$csrf?>">
+    <?php if (!empty($banco->id)) : ?>
+        <input type="hidden" name="id" value="<?=$banco->hash()?>">
+    <?php endif ?>
+
+    <div class="mb-3">
+        <label for="nome" class="form-label" title="Campo Obrigatório">Nome <span class="text-danger">*</span></label>
+        <input type="text" class="form-control" id="nome" name="nome" placeholder="Nome do banco" required value="<?=$banco->nome ?? ""?>">
+    </div>
+
+    <div class="row">
+        <div class="col-md-4 mb-3">
+            <label for="codigo" class="form-label">Código</label>
+            <input type="text" class="form-control" id="codigo" name="codigo" placeholder="000" maxlength="10" value="<?=$banco->codigo ?? ""?>">
+        </div>
+        <div class="col-md-8 mb-3">
+            <label for="cnpj" class="form-label">CNPJ</label>
+            <input type="text" class="form-control" id="cnpj" name="cnpj" placeholder="00.000.000/0000-00" maxlength="20" value="<?=$banco->cnpj ?? ""?>">
+        </div>
+    </div>
+
+    <div class="mb-0">
+        <label class="form-label">Logo</label>
+        <?php if (!empty($banco->logo)) : ?>
+            <div class="logo-preview-wrap mb-2" id="banco-logo-preview">
+                <img src="<?=storage()?>/media/banco/<?=$banco->logo?>" alt="Logo atual" style="height:40px;width:auto;object-fit:contain;">
+                <button type="button" class="btn btn-outline-danger btn-sm ms-2 btn-delete-logo"
+                    data-delete-logo-url="<?=$router->route("admin.banco.delete.logo")?>"
+                    data-id="<?=$banco->hash()?>"
+                    data-csrf="<?=$csrf?>"
+                    data-target="banco-logo-preview">
+                    <i class="uil uil-times"></i> Remover logo
+                </button>
+            </div>
+        <?php endif ?>
+        <div>
+            <input type="file" name="logo" id="banco-logo" data-extensions="jpg jpeg png gif webp svg">
+        </div>
+    </div>
+</form>

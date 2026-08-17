@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <?php $isDevAssetMode = in_array(strtolower((string) app('env')), ['local', 'dev', 'sandbox', 'development'], true); ?>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="robots" content="noindex">
+    <meta content="<?=  app("title") ?>" name="description" />
+    <!-- App favicon -->
+    <link rel="icon" type="image/png" href="<?php echo layout("favicon.png") ?>" sizes="32x32">
+    <link rel="shortcut icon" href="<?php echo layout("favicon.ico") ?>" type="image/x-icon" />
+    <!-- App css -->
+    <link rel="stylesheet" href="<?=URL_FONT_AWESOME?>">
+    <link rel="stylesheet" href="<?=URL_FONT_UNICONS?>">
+    <link rel="stylesheet" href="<?=URL_FONT_TABLER?>">
+    <?php if ($isDevAssetMode) : ?>
+        <link href="<?= asset("dist/bootstrap/css/bootstrap.css")?>" rel="stylesheet" type="text/css" id="bootstrap-style"/>
+        <link href="<?= asset("app/css/volt.css")?>" rel="stylesheet" type="text/css" id="volt-style"/>
+        <link href="<?= asset("app/css/style.min.css")?>" rel="stylesheet" type="text/css" id="app-style"/>
+        <link href="<?= asset("app/css/web-awesome.css")?>" rel="stylesheet" type="text/css" id="web-awesome-style"/>
+    <?php else : ?>
+        <link href="<?= asset("app/css/app.min.css")?>" rel="stylesheet" type="text/css" id="app-style"/>
+    <?php endif; ?>
+    <link href="<?= asset("app/css/util.min.css")?>" rel="stylesheet" type="text/css" id="util-style"/>

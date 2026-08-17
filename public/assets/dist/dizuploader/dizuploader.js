@@ -1,0 +1,445 @@
+(function ($) {
+    "use strict";
+
+    const MIME_BY_EXTENSION = {
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        png: "image/png",
+        gif: "image/gif",
+        bmp: "image/bmp",
+        webp: "image/webp",
+        svg: "image/svg+xml",
+        pdf: "application/pdf",
+        txt: "text/plain",
+        csv: "text/csv"
+    };
+
+    $.fn.dizuploader = function (options) {
+        return this.each(function () {
+            const $original = $(this);
+            const originalId = $original.attr("id");
+
+            if ($original.data("dizuploaderInitialized")) {
+                return;
+            }
+
+            const settings = $.extend({
+                extensions: $original.data("extensions")
+                    ? String($original.data("extensions")).split(/[\s,]+/).map(function (ext) {
+                        return String(ext || "").trim().toLowerCase();
+                    }).filter(Boolean)
+                    : ["*"],
+                maxFiles: $original.data("max-files") || false,
+                maxSize: $original.data("max-size") || false,
+                dropBody: false,
+                caption: "Arraste e solte os arquivos. Ou clique para carregar",
+                ajaxUpload: false,
+                uploadUrl: "/upload",
+                ajaxMethod: "POST",
+                onFileUploadSuccess: function () {},
+                onFileUploadError: function () {},
+                onAllFilesUploaded: function () {}
+            }, options);
+
+            const id = originalId || ("dizuploader-" + Math.random().toString(36).slice(2, 10));
+            const name = $original.attr("name");
+            const multiple = $original.prop("multiple");
+            const required = $original.prop("required");
+            const currentAccept = $original.attr("accept");
+
+            let extensionData = "";
+            if ($.fn.validate && settings.extensions[0] !== "*") {
+                const extensionsRule = settings.extensions.join("|");
+                const extensionsMsg = "Alguma(s) extensoes nao sao permitidas. Apenas " + settings.extensions.join(", ");
+                extensionData = ' data-rule-extension="' + extensionsRule + '" data-msg-extension="' + extensionsMsg + '"';
+            }
+
+            const wrap = '' +
+                '<div class="dizuploader' + (settings.ajaxUpload ? ' ajax-upload' : '') + '">' +
+                    '<input class="dizuploader__input" type="file"' +
+                        (id ? ' id="' + id + '"' : "") +
+                        (name ? ' name="' + name + '"' : "") +
+                        (multiple ? ' multiple' : "") +
+                        (required ? ' required' : "") +
+                        extensionData +
+                    ">" +
+                    '<label class="dizuploader__label" id="' + id + '__label">' +
+                        '<i class="fas fa-cloud-upload-alt fa-2x"></i>' +
+                        '<span>' + settings.caption + '</span>' +
+                        '<small class="dizuploader__count"></small>' +
+                        '<div><button type="button" class="dizuploader__clearfiles">✕ Remover todos os arquivos</button></div>' +
+                    "</label>" +
+                    '<div class="dizuploader__list"></div>' +
+                    '<div class="dizuploader__error__files invalid-feedback d-none"></div>' +
+                "</div>";
+
+            $original.before(wrap);
+            $original.remove();
+
+            const $input = $("#" + id);
+            const $box = $input.closest(".dizuploader");
+            const $count = $box.find(".dizuploader__count");
+            const $list = $box.find(".dizuploader__list");
+            const $clear = $box.find(".dizuploader__clearfiles");
+            const $label = $box.find(".dizuploader__label");
+            const $error = $box.find(".dizuploader__error__files");
+
+            $input.data("dizuploaderInitialized", true);
+
+            if (currentAccept) {
+                $input.attr("accept", currentAccept);
+            } else if (settings.extensions[0] !== "*") {
+                const acceptExtensions = settings.extensions.map(function (ext) {
+                    return MIME_BY_EXTENSION[ext] || ("." + ext);
+                });
+                const uniqueAccept = Array.from(new Set(
+                    acceptExtensions.concat(settings.extensions.map(function (ext) {
+                        return "." + ext;
+                    }))
+                ));
+
+                $input.attr("accept", uniqueAccept.join(","));
+            }
+
+            function canDragAndDrop() {
+                const div = document.createElement("div");
+                return (("draggable" in div) || ("ondragstart" in div && "ondrop" in div))
+                    && "FormData" in window
+                    && "FileReader" in window
+                    && multiple;
+            }
+
+            function getExtension(path) {
+                const basename = String(path || "").split(/[\\/]/).pop();
+                const pos = basename.lastIndexOf(".");
+
+                if (!basename || pos < 1) {
+                    return "";
+                }
+
+                return basename.slice(pos + 1).toLowerCase();
+            }
+
+            function fileListItems(files) {
+                const transfer = new DataTransfer();
+
+                files.forEach(function (file) {
+                    transfer.items.add(file);
+                });
+
+                return transfer.files;
+            }
+
+            function clearError() {
+                $box.removeClass("dizuploader__error");
+                $input.removeClass("is-invalid");
+                $error.addClass("d-none").text("");
+            }
+
+            function showError(message) {
+                $box.addClass("dizuploader__error");
+                $input.addClass("is-invalid");
+                $error.removeClass("d-none").text(message);
+            }
+
+            function clearList() {
+                $list.html("");
+                $count.html("");
+                clearError();
+            }
+
+            function countFiles(totalFiles, totalSize) {
+                let sizeLabel = Math.ceil((totalSize || 0) / 1024);
+                sizeLabel = sizeLabel > 1024 ? Math.ceil(sizeLabel / 1024) + " MB" : sizeLabel + " KB";
+
+                if (!totalFiles) {
+                    clearList();
+                    $clear.hide();
+                    return;
+                }
+
+                $count.html(
+                    totalFiles === 1
+                        ? "Foi selecionado 1 arquivo. (Total de " + sizeLabel + ")"
+                        : "Foram selecionados " + totalFiles + " arquivos. (Total de " + sizeLabel + ")"
+                );
+                $clear.show();
+            }
+
+            function renderFileLine(index, file, ext) {
+                const images = ["jpg", "jpeg", "bmp", "gif", "png", "apng", "jfif", "svg", "webp"];
+                const icons = {
+                    pdf: "fas fa-file-pdf",
+                    doc: "fas fa-file-word",
+                    docx: "fas fa-file-word",
+                    xls: "fas fa-file-excel",
+                    xlsx: "fas fa-file-excel",
+                    ppt: "fas fa-file-powerpoint",
+                    pptx: "fas fa-file-powerpoint",
+                    pps: "fas fa-file-powerpoint",
+                    ppsx: "fas fa-file-powerpoint",
+                    mp3: "fas fa-file-audio",
+                    ogg: "fas fa-file-audio",
+                    wma: "fas fa-file-audio",
+                    zip: "fas fa-file-archive",
+                    rar: "fas fa-file-archive",
+                    csv: "fas fa-file-csv",
+                    txt: "fas fa-file-alt"
+                };
+                const size = Math.ceil(file.size / 1024);
+                const sizeLabel = size > 1024 ? Math.ceil(size / 1024) + " MB" : size + " KB";
+                const deleteButton = '<button type="button" class="dizuploader__delete" data-index="' + index + '">✕</button>';
+                let lineHtml = '<div class="line border-top" data-id="' + index + '">';
+
+                if (images.includes(ext)) {
+                    lineHtml += '<img src="' + URL.createObjectURL(file) + '" alt="">';
+                } else {
+                    lineHtml += '<i class="' + (icons[ext] || "fas fa-file") + ' fa-2x me-3"></i>';
+                }
+
+                lineHtml += '' +
+                    '<div>' +
+                        '<strong>' + file.name + '</strong><br>' +
+                        '<small>' + sizeLabel + '</small>' +
+                        deleteButton +
+                    '</div>';
+
+                if (settings.ajaxUpload) {
+                    lineHtml += '<div class="progress"><div class="progress-bar"></div></div>';
+                }
+
+                lineHtml += "</div>";
+                $list.prepend(lineHtml);
+            }
+
+            function renderInvalidLine(file, ext, index) {
+                $list.prepend(
+                    '<div class="line error border-top" data-id="' + index + '">' +
+                        file.name + " (." + ext + ") - Extensao nao permitida" +
+                        '<button type="button" class="dizuploader__delete" data-index="' + index + '">✕</button>' +
+                    "</div>"
+                );
+            }
+
+            function showFiles(files) {
+                let total = 0;
+                let hasInvalidFile = false;
+
+                clearList();
+
+                Array.from(files).forEach(function (file, index) {
+                    const ext = getExtension(file.name);
+
+                    if (settings.extensions[0] !== "*" && !settings.extensions.includes(ext)) {
+                        hasInvalidFile = true;
+                        renderInvalidLine(file, ext, index);
+                        return;
+                    }
+
+                    total += file.size;
+                    renderFileLine(index, file, ext);
+                });
+
+                countFiles(files.length, total);
+
+                if (hasInvalidFile) {
+                    showError("Alguma(s) extensoes nao sao permitidas. Apenas " + settings.extensions.join(", ") + ".");
+                }
+            }
+
+            function resetFiles() {
+                $input.val("");
+                try {
+                    $input[0].files = fileListItems([]);
+                } catch (error) {
+                    // Alguns navegadores nao permitem setar FileList manualmente.
+                }
+                clearList();
+                countFiles(0, 0);
+            }
+
+            function validateSelection(files) {
+                const fileArray = Array.from(files || []);
+
+                clearError();
+
+                if (!fileArray.length) {
+                    return true;
+                }
+
+                if (settings.maxFiles && fileArray.length > Number(settings.maxFiles)) {
+                    showError("Voce pode enviar no maximo " + settings.maxFiles + " arquivo(s).");
+                    resetFiles();
+                    return false;
+                }
+
+                const totalSize = fileArray.reduce(function (sum, file) {
+                    return sum + file.size;
+                }, 0);
+
+                if (settings.maxSize && totalSize > Number(settings.maxSize)) {
+                    showError("O tamanho total dos arquivos nao pode exceder " + (settings.maxSize / 1024 / 1024).toFixed(2) + " MB.");
+                    resetFiles();
+                    return false;
+                }
+
+                const invalidFiles = fileArray.filter(function (file) {
+                    return settings.extensions[0] !== "*" && !settings.extensions.includes(getExtension(file.name));
+                });
+
+                if (invalidFiles.length) {
+                    showFiles(fileArray);
+                    resetFiles();
+                    showError("Alguma(s) extensoes nao sao permitidas. Apenas " + settings.extensions.join(", ") + ".");
+                    return false;
+                }
+
+                return true;
+            }
+
+            function uploadFiles(files) {
+                const formData = new FormData();
+
+                $.each(files, function (index, file) {
+                    formData.append("files[]", file);
+                });
+
+                $.ajax({
+                    url: settings.uploadUrl,
+                    type: settings.ajaxMethod,
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    xhr: function () {
+                        const xhr = new XMLHttpRequest();
+
+                        xhr.upload.addEventListener("progress", function (event) {
+                            if (!event.lengthComputable) {
+                                return;
+                            }
+
+                            const percent = (event.loaded / event.total) * 100;
+                            $list.find(".progress-bar").css("width", percent + "%");
+                        }, false);
+
+                        return xhr;
+                    },
+                    success: function (response) {
+                        if (response && response.success) {
+                            settings.onAllFilesUploaded();
+                            return;
+                        }
+
+                        settings.onFileUploadError(files);
+                    },
+                    error: function () {
+                        settings.onFileUploadError(files);
+                    }
+                });
+            }
+
+            if (canDragAndDrop()) {
+                const $target = settings.dropBody ? $("body") : $box;
+
+                $target.on("drag dragstart dragend dragover dragenter dragleave drop", function (event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                });
+
+                $target.on("dragover dragenter", function () {
+                    $box.addClass("dizuploader__dragover");
+                });
+
+                $target.on("dragleave dragend drop", function () {
+                    $box.removeClass("dizuploader__dragover");
+                });
+
+                $target.on("drop", function (event) {
+                    const droppedFiles = event.originalEvent.dataTransfer && event.originalEvent.dataTransfer.files
+                        ? event.originalEvent.dataTransfer.files
+                        : null;
+
+                    if (!droppedFiles || !droppedFiles.length) {
+                        return;
+                    }
+
+                    if (!validateSelection(droppedFiles)) {
+                        return;
+                    }
+
+                    try {
+                        $input[0].files = droppedFiles;
+                    } catch (error) {
+                        // Mantem compatibilidade caso o navegador nao permita setar o FileList.
+                    }
+
+                    showFiles(droppedFiles);
+                });
+            }
+
+            $label.on("click", function (event) {
+                if (event.target.type === "button") {
+                    event.preventDefault();
+                    return;
+                }
+
+                event.preventDefault();
+                $input.trigger("click");
+            });
+
+            $input.on("change", function (event) {
+                const files = event.target.files;
+
+                if (!validateSelection(files)) {
+                    return;
+                }
+
+                showFiles(files);
+
+                if (settings.ajaxUpload) {
+                    uploadFiles(files);
+                }
+
+                if ($input.data("validator")) {
+                    $input.valid();
+                }
+            });
+
+            $clear.on("click", function (event) {
+                event.preventDefault();
+                resetFiles();
+                if ($input.data("validator")) {
+                    $input.valid();
+                }
+            });
+
+            $list.on("click", ".dizuploader__delete", function () {
+                const index = Number($(this).data("index"));
+                const files = Array.from($input[0].files || []);
+
+                if (!files.length) {
+                    return;
+                }
+
+                files.splice(index, 1);
+
+                try {
+                    $input[0].files = fileListItems(files);
+                } catch (error) {
+                    resetFiles();
+                    return;
+                }
+
+                showFiles(files);
+
+                if (!files.length) {
+                    resetFiles();
+                }
+
+                if ($input.data("validator")) {
+                    $input.valid();
+                }
+            });
+        });
+    };
+})(jQuery);

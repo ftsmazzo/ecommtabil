@@ -1,0 +1,157 @@
+<?php $this->layout("app/template/base"); ?>
+
+<?php $this->start("styles") ?>
+<link rel="stylesheet" type="text/css" href="<?=asset("dist/dizuploader/dizuploader.min.css")?>">
+<?php $this->end() ?>
+
+<?php $this->start("endScripts") ?>
+<script>
+    window.adminUsuarioFormConfig = {
+        loginCheckUrl: "<?=$router->route("admin.usuario.find")?>",
+        profilePermissionsUrl: "<?=$router->route("admin.perfil.permissions", ["id" => "__ID__"])?>",
+        currentUserId: "<?=$usuario->id?>"
+    };
+</script>
+<script type="text/javascript" src="<?=asset("dist/dizuploader/dizuploader.min.js")?>"></script>
+<script type="text/javascript" src="<?=asset("admin/js/usuario-form.js")?>"></script>
+<?php $this->end() ?>
+
+<?php $this->start("page-actions") ?>
+<?php if ($permissao["historico"]) : ?>
+    <div class="mt-3">
+        <a class="btn btn-white btn-sm" href="<?=$router->route("admin.usuario.historico", ["id" => md5($usuario->id)])?>"><i class="uil uil-history"></i> Historico de Login</a>
+    </div>
+<?php endif ?>
+<?php $this->end() ?>
+
+<form id="form-usuario-editar" class="form-validate" action="<?=$router->route("admin.usuario.update")?>" method="POST" enctype="multipart/form-data">
+    <div class="card crud-form-card">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-xl-7 mb-3 mb-xl-0">
+                    <div class="crud-subsection">
+                        <div class="row">
+                            <div class="col-sm-6"><div class="mb-3"><label class="form-label" title="Campo Obrigatório">Nome <span class="text-danger">*</span></label><input type="text" name="nome" class="form-control placeholder-text-normal" value="<?=$usuario->nome?>" required></div></div>
+                            <div class="col-sm-6"><div class="mb-3"><label class="form-label">Cargo</label><input type="text" name="cargo" class="form-control placeholder-text-normal" value="<?=$usuario->cargo?>"></div></div>
+                            <div class="col-sm-6 col-md-8"><div class="mb-3 mb-md-0"><label class="form-label">E-mail</label><input type="email" name="email" class="form-control placeholder-text-normal" value="<?=$usuario->email?>"></div></div>
+                            <div class="col-sm-6 col-md-4"><div class="mb-0"><label class="form-label">Whatsapp</label><input type="tel" name="whatsapp" class="form-control placeholder-text-normal input-phone" value="<?=$usuario->whatsapp?>"></div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-xl-5">
+                    <div class="crud-subsection">
+                        <div class="row">
+                            <div class="col-sm-6 col-md-4 col-xl-5"><div class="mb-3 mb-md-0"><label class="form-label">Cor</label><input type="color" id="input-cor" name="cor" class="form-control form-control-color w-100" value="<?=!empty($usuario->cor) ? $usuario->cor : "#000000"?>" title="Escolha a cor" list="presetColors"><datalist id="presetColors"><?php foreach ($cores ?? [] as $cor) : ?><option value="<?=strtoupper($cor)?>"><?php endforeach ?></datalist></div></div>
+                            <div class="col-sm-6 col-md-4"><div class="mb-3 mb-md-0"><label class="form-label">Status</label><select class="form-select" name="status"><option <?=$usuario->status == 1 ? "selected" : ""?> value="1">Ativo</option><option <?=$usuario->status == 0 ? "selected" : ""?> value="0">Inativo</option></select></div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row mt-3">
+                <div class="col-lg-6 mb-3 mb-lg-0">
+                    <div class="crud-subsection">
+                        <div class="crud-section-copy mb-3">
+                            <h5><i class="uil uil-unlock"></i> Dados de acesso</h5>
+                            <small>Atualize login e senha somente quando realmente precisar alterar o acesso.</small>
+                        </div>
+                        <div class="mb-3"><label class="form-label" title="Campo Obrigatório">Login <span class="text-danger">*</span></label><div class="input-group"><input type="text" class="form-control" id="login" name="login" value="<?=$usuario->login?>" disabled autocomplete="off" required><span class="input-group-text cursor-pointer" title="Alterar Login" data-tooltip="true" id="enableInput"><i class="uil uil-sync"></i></span></div></div>
+                        <div class="mb-0"><label class="form-label">Senha</label><div class="input-group"><input type="password" class="form-control pass border-end-0" id="senha" name="senha"><span class="input-group-text toggle-pass"><i class="uil-eye"></i></span></div><small class="form-text text-help">Preencha a senha apenas se quiser alterá-la</small></div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="crud-subsection">
+                        <div class="crud-section-copy mb-3">
+                            <h5><i class="uil uil-user-square"></i> Identificação visual</h5>
+                            <small>Use uma imagem para facilitar identificação do usuário nas áreas administrativas.</small>
+                        </div>
+                        <div class="mb-0">
+                            <label class="form-label">Foto</label>
+                            <?php if ($usuario->foto) : ?>
+                                <div class="usuario-foto-preview me-2" style="width:120px;height:120px;">
+                                    <img src="<?=storage()?>/media/usuarios/<?=$usuario->foto?>" alt="<?= $usuario->nome ?>">
+                                </div>
+                                <a onclick="Delete('delete/foto')" class="btn btn-outline-danger btn-sm"><i class="fa fa-times"></i> Remover imagem</a>
+                            <?php else : ?>
+                                <div><input type="file" name="foto" id="foto" data-extensions="jpg jpeg png"></div>
+                            <?php endif ?>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <input type="hidden" name="csrf" value="<?=$csrf?>">
+            <input type="hidden" name="id" value="<?=md5($usuario->id)?>">
+
+            <div class="mt-3 pt-4 border-top">
+                <div class="d-grid gap-2 d-sm-block">
+                    <button class="btn btn-primary" type="submit">Salvar</button>
+                    <a href="<?=$url_back?>" class="btn btn-white"><i class="uil uil-left"></i> Voltar</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <?php if ($permissao["permissoes"]) : ?>
+        <div class="card crud-form-card mt-4">
+            <div class="card-body">
+                <div class="crud-section-head">
+                    <div class="crud-section-copy">
+                        <h5><i class="uil uil-unlock"></i> Permissões</h5>
+                        <small>O perfil continua sendo apenas um template. A autorização final usa a coleção individual marcada neste usuário.</small>
+                    </div>
+                    <div class="text-end">
+                        <div class="form-check d-inline-block">
+                            <input class="form-check-input" type="checkbox" id="p-check-all">
+                            <label class="form-check-label cursor-pointer" for="p-check-all">Marcar Todos</label>
+                        </div>
+                    </div>
+                </div>
+                <hr class="mt-2">
+                <div class="permission-profile-bar">
+                    <div class="permission-profile-field">
+                        <label class="form-label">Perfil Base</label>
+                        <select class="form-select" name="id_perfil" <?=empty($perfis) ? "disabled" : ""?>>
+                            <option value="">Sem perfil predefinido</option>
+                            <?php foreach ($perfis as $perfil) : ?><option value="<?=$perfil->id?>" <?=$usuario->id_perfil == $perfil->id ? "selected" : ""?>><?=$perfil->nome?></option><?php endforeach ?>
+                        </select>
+                        <?php if (!empty($perfis)) : ?>
+                            <small class="form-text text-help">Ao escolher um perfil, os marcações atuais são limpas e apenas as permissões do perfil são marcadas. Depois disso, você pode marcar ou desmarcar o que quiser livremente.</small>
+                        <?php else : ?>
+                            <small class="form-text text-help">Nenhum perfil cadastrado no momento. As permissões podem ser marcadas manualmente abaixo.</small>
+                        <?php endif ?>
+                    </div>
+                </div>
+                <div id="permissoes">
+                    <?php foreach ($permissoes as $agrupamento => $grupos) : ?>
+                        <div class="bloco">
+                            <h1 class="border-bottom fw-bolder pb-2 text-uppercase group-name permission-group-title"><?=$agrupamento?></h1>
+                            <div class="row">
+                                <?php foreach ($grupos as $grupo => $perm) : ?>
+                                    <div class="col-xxl-2 col-lg-3 col-md-4 col-sm-6 col-xs-6 mb-3">
+                                        <div class="permission-block">
+                                            <div class="permission-block-head">
+                                                <h5><?=ucfirst(str_replace("_", " ", $grupo))?></h5>
+                                                <div class="form-check m-0">
+                                                    <input class="form-check-input permission-card-toggle" type="checkbox" id="toggle-<?=md5($agrupamento . "-" . $grupo)?>">
+                                                </div>
+                                            </div>
+                                            <div class="ps-3">
+                                                <?php foreach ($perm as $p) : ?>
+                                                    <div class="form-check mb-1">
+                                                        <input class="form-check-input" type="checkbox" value="<?=$p->id?>" name="permissoes[]" id="p-<?=$p->id?>" <?=$p->check ? "checked" : ""?>>
+                                                        <label class="form-check-label cursor-pointer" for="p-<?=$p->id?>"><?=$p->descricao?></label>
+                                                    </div>
+                                                <?php endforeach ?>
+                                            </div>
+                                        </div>
+                                    </div>
+                                <?php endforeach ?>
+                            </div>
+                        </div>
+                    <?php endforeach ?>
+                </div>
+            </div>
+        </div>
+    <?php endif ?>
+</form>

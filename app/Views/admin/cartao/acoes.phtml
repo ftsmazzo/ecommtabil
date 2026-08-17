@@ -1,0 +1,91 @@
+<?php $this->layout("app/template/base"); ?>
+
+<?php $this->start("page-actions") ?>
+    <a class="btn btn-white btn-sm" href="<?=$url_back?>"><i class="uil uil-left me-1"></i>Cartões</a>
+<?php $this->end() ?>
+
+<div class="card crud-form-card mb-4">
+    <div class="card-body">
+        <div class="crud-section-copy mb-3">
+            <h5><i class="uil uil-credit-card me-1"></i> Cartão cadastrado</h5>
+            <small>Escolha a próxima ação operacional para continuar o atendimento.</small>
+        </div>
+
+        <div class="row g-3">
+            <div class="col-12 col-lg-4">
+                <div class="border rounded-3 h-100 p-3">
+                    <small class="text-muted d-block mb-1">Cliente</small>
+                    <strong class="d-block"><?=$cartao->cliente_print?></strong>
+                    <span class="text-muted"><?=$cartao->cliente_doc_print?></span>
+                </div>
+            </div>
+            <div class="col-12 col-lg-4">
+                <div class="border rounded-3 h-100 p-3">
+                    <small class="text-muted d-block mb-1">Telefone</small>
+                    <strong class="d-block"><?=$cartao->cliente_phone_print?></strong>
+                    <span class="text-muted">Contato principal do cliente</span>
+                </div>
+            </div>
+            <div class="col-12 col-lg-4">
+                <div class="border rounded-3 h-100 p-3">
+                    <small class="text-muted d-block mb-1">Código do cartão</small>
+                    <strong class="d-block"><code><?=$cartao->codigo_print?></code></strong>
+                    <span class="text-muted">Validade: <?=$cartao->validade_print?></span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-12 col-lg-4">
+        <div class="card crud-form-card h-100">
+            <div class="card-body d-flex flex-column">
+                <div class="crud-section-copy mb-3">
+                    <h5><i class="uil uil-wallet me-1"></i> Recarga</h5>
+                    <small>Adicionar saldo ou crédito no cartão recém-emitido.</small>
+                </div>
+
+                <div class="mt-auto">
+                    <button type="button" class="btn btn-primary w-100" disabled>Iniciar recarga</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-4">
+        <div class="card crud-form-card h-100">
+            <div class="card-body d-flex flex-column">
+                <div class="crud-section-copy mb-3">
+                    <h5><i class="uil uil-gift me-1"></i> Cashback</h5>
+                    <small>
+                        <?php if ($cashback_disponivel) : ?>
+                            Aplicar cashback no cartão conforme a regra ativa.
+                        <?php else : ?>
+                            Disponível somente quando existir regra de cashback configurada.
+                        <?php endif ?>
+                    </small>
+                </div>
+
+                <div class="mt-auto">
+                    <button type="button" class="btn btn-white w-100" disabled>Aplicar cashback</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-4">
+        <div class="card crud-form-card h-100">
+            <div class="card-body d-flex flex-column">
+                <div class="crud-section-copy mb-3">
+                    <h5><i class="uil uil-exchange me-1"></i> Outra movimentação</h5>
+                    <small>Seguir para outro tipo de operação cabível no fluxo do cartão.</small>
+                </div>
+
+                <div class="mt-auto">
+                    <button type="button" class="btn btn-white w-100" disabled>Escolher movimentação</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

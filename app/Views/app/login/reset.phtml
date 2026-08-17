@@ -1,0 +1,88 @@
+<?= $this->insert("app/template/head"); ?>
+<title><?=TITLE_SITE?> | Redefinir senha</title>
+<script src="<?= asset("dist/notyf/notyf.min.js") ?>"></script>
+<script src="<?= asset("app/js/login.min.js") ?>" defer></script>
+<?php if ($recaptcha) : ?>
+<script src="https://www.google.com/recaptcha/api.js?render=<?=$recaptcha?>" defer></script>
+<script>rkey="<?=$recaptcha?>"</script>
+<?php endif ?>
+<script>window.passwordMinLength = <?= (int)($password_min_length ?? 5) ?>;</script>
+<?php if ($background) : ?>
+<style type="text/css">
+body {
+    background: url("<?=$background?>") no-repeat center center fixed;
+    -webkit-background-size: cover;
+    -moz-background-size: cover;
+    -o-background-size: cover;
+    background-size: cover;
+}
+</style>
+<?php endif ?>
+</head>
+
+<body>
+    <div class="authentication-page<?= ($template ?? "fluid") === "fluid" ? " fluid" : "" ?>">
+        <?php if (($template ?? "fluid") === "fluid") : ?>
+        <div class="wrapper">
+        <?php endif ?>
+            <div id="login-box" class="<?= ($template ?? "fluid") === "box" ? "bg-white rounded border-light" : "" ?> border-0 p-4 p-lg-5 m-auto">
+
+                <?php if ($logo) : ?>
+                    <div class="login-logo">
+                        <img src="<?=$logo?>" alt="<?= app("name") ?>" height="<?= $logo_height ?? "100" ?>">
+                    </div>
+                <?php endif ?>
+
+                <div class="text-center text-md-center mb-4 mt-md-0">
+                    <h1 class="mb-0 h3">Redefinir senha</h1>
+                    <p class="text-muted mt-2 mb-4">Digite sua nova senha para concluir a recuperacao de acesso.</p>
+                </div>
+
+                <form id="form-password-reset" action="<?=$action?>" method="POST" class="mt-4" validate>
+                    <input type="hidden" name="csrf" value="<?=$csrf?>">
+                    <input type="hidden" name="token" value="<?=$token?>">
+
+                    <div class="form-group mb-4">
+                        <label class="fw-medium mb-2" for="password">Nova senha</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white">
+                                <i class="uil uil-lock icon icon-xs text-gray-600"></i>
+                            </span>
+                            <input type="password" placeholder="Digite sua nova senha" class="form-control form-control-lg border-start-0 border-end-0" id="password" name="senha" autocomplete="new-password" minlength="<?= (int)($password_min_length ?? 5) ?>" required>
+                            <span class="input-group-text bg-white toggle-pass">
+                                <i class="uil uil-eye icon icon-xs text-gray-600"></i>
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="form-group mb-4">
+                        <label class="fw-medium mb-2" for="confirm">Confirmar senha</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white">
+                                <i class="uil uil-lock icon icon-xs text-gray-600"></i>
+                            </span>
+                            <input type="password" placeholder="Repita a nova senha" class="form-control form-control-lg border-start-0 border-end-0" id="confirm" name="confirm" autocomplete="new-password" minlength="<?= (int)($password_min_length ?? 5) ?>" required>
+                            <span class="input-group-text bg-white toggle-pass">
+                                <i class="uil uil-eye icon icon-xs text-gray-600"></i>
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg">Salvar nova senha</button>
+                    </div>
+
+                    <div class="text-center mt-3">
+                        <a href="<?=$login_url?>" class="small">Voltar ao login</a>
+                    </div>
+
+                    <div id="login-message" class="mt-3"><?php flash() ?></div>
+                </form>
+
+            </div>
+        <?php if (($template ?? "fluid") === "fluid") : ?>
+        </div>
+        <?php endif ?>
+    </div>
+</body>
+</html>

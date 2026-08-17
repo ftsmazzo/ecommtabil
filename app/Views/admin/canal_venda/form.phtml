@@ -1,0 +1,46 @@
+<form id="form-canal-venda" class="form-validate" action="<?=$url_action?>" method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="csrf" value="<?=$csrf?>">
+    <?php if (!empty($canal->id)) : ?>
+        <input type="hidden" name="id" value="<?=$canal->hash()?>">
+    <?php endif ?>
+
+    <div class="mb-3">
+        <label for="cv-nome" class="form-label" title="Campo Obrigatório">Nome <span class="text-danger">*</span></label>
+        <input type="text" class="form-control" id="cv-nome" name="nome" placeholder="Ex: iFood, Shopee, Mercado Livre" required value="<?=$canal->nome ?? ""?>">
+    </div>
+
+    <div class="mb-3">
+        <label for="cv-tipo" class="form-label">Tipo</label>
+        <select class="form-select" id="cv-tipo" name="tipo">
+            <option value="">Selecione...</option>
+            <?php foreach ($tipos as $key => $label) : ?>
+                <option value="<?=$key?>" <?= !empty($canal) && $canal->tipo === $key ? "selected" : "" ?>><?=$label?></option>
+            <?php endforeach ?>
+        </select>
+    </div>
+
+    <div class="mb-3">
+        <label for="cv-url" class="form-label">URL</label>
+        <input type="url" class="form-control" id="cv-url" name="url" placeholder="https://..." value="<?=$canal->url ?? ""?>">
+    </div>
+
+    <div class="mb-0">
+        <label class="form-label">Logo</label>
+        <?php if (!empty($canal->logo)) : ?>
+            <div class="logo-preview-wrap mb-2" id="cv-logo-preview">
+                <img src="<?=storage()?>/media/canal_venda/<?=$canal->logo?>" alt="Logo atual" style="height:48px;width:auto;object-fit:contain;">
+                <button type="button" class="btn btn-outline-danger btn-sm ms-2 btn-delete-logo"
+                    data-delete-logo-url="<?=$router->route("admin.canal.venda.delete.logo")?>"
+                    data-id="<?=$canal->hash()?>"
+                    data-csrf="<?=$csrf?>"
+                    data-target="cv-logo-preview"
+                    data-record-id="<?=$canal->hash()?>">
+                    <i class="uil uil-times"></i> Remover logo
+                </button>
+            </div>
+        <?php endif ?>
+        <div>
+            <input type="file" name="logo" id="cv-logo" data-extensions="jpg jpeg png gif webp svg">
+        </div>
+    </div>
+</form>

@@ -1,0 +1,351 @@
+/**** nÃO MEXER ****/
+
+body {
+    --border-color: #eef2f7;
+}
+
+body[data-layout-color="dark"] {
+    --border-color: #464f5b;
+}
+
+/* Força máxima para preservar background e cor do texto no thead */
+#table-controle thead th {
+    vertical-align: middle;
+}
+
+#table-controle thead th.serv,
+#table-controle thead tr:hover th.serv,
+#table-controle thead th.serv:hover {
+    background-color: inherit !important;
+    background-image: none !important;
+    background-blend-mode: normal !important;
+    box-shadow: none !important;
+    filter: none !important;
+    opacity: 1 !important;
+    color: inherit !important;
+    -webkit-text-fill-color: inherit !important;
+    mix-blend-mode: normal !important;
+}
+
+/* preserva fundo customizado do thead */
+#table-controle thead th.serv,
+#table-controle thead tr:hover th.serv,
+#table-controle thead th.serv:hover {
+    background-color: inherit !important;
+    color: inherit !important;
+    vertical-align: middle;
+}
+
+#table-controle tbody td.bg-danger,
+#table-controle tbody td.bg-warning,
+#table-controle tbody td.bg-success {
+    color: #fff !important;
+}
+
+/**** final não mexer ****/
+
+
+/* ============================================================
+   BASE / RESET
+   ============================================================ */
+
+#table-controle {
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    width: 100%;
+    margin-left: 0 !important;
+    padding-left: 0 !important;
+}
+
+#table-controle th,
+#table-controle td {
+    font-size: 12px !important;
+    padding: 7px 6px;
+    white-space: normal;
+    position: relative;
+    border: 0 !important;
+    background-clip: padding-box;
+}
+
+#table-controle .no-wrap {
+    white-space: nowrap !important;
+}
+
+/* #table-controle .td.serv {
+    white-space: nowrap !important;
+} */
+
+
+/* ============================================================
+   PSEUDO-BORDAS FINAS
+   ============================================================ */
+
+#table-controle th::after,
+#table-controle td::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--border-color);
+    pointer-events: none;
+    z-index: 0;
+}
+
+#table-controle th::before,
+#table-controle td::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 1px;
+    background: var(--border-color);
+    pointer-events: none;
+    z-index: 0;
+}
+
+
+/* ============================================================
+   SERVIÇOS
+   ============================================================ */
+
+th.serv p,
+td.serv p {
+    width: 82px;
+    max-width: 82px;
+    margin: 0;
+    white-space: normal;
+    word-break: break-word;
+    text-align: center;
+    font-size: 10px;
+    font-weight: normal;
+    line-height: 12px;
+}
+
+th.serv,
+td.serv {
+    width: 105px !important;
+    max-width: 105px !important;
+}
+
+td.serv {
+    padding: 0 !important;
+}
+
+td.serv a {
+    cursor: pointer;
+    color: #5d5d5d;
+    display: inline-flex;
+    width: 99%;
+    justify-content: center;
+    height: inherit;
+    min-height: 40px;
+    align-items: center;
+}
+
+td[class*="bg-"], th[class*="bg-"] {
+    --ct-table-accent-bg: unset !important;
+}
+
+table#table-controle.table-hover tbody tr:hover > *[class*="bg-"] {
+    --ct-table-accent-bg: unset !important;
+}
+
+
+/* ============================================================
+   WRAPPERS / BORDAS EXTERNAS
+   ============================================================ */
+
+.scroll-wrapper {
+    padding: 0 !important;
+}
+
+.table-scroll {
+    position: relative;
+    padding: 0 !important;
+    border: 1px solid var(--border-color);
+    /* overflow-x: auto; */
+    overflow-x: hidden;
+    overflow-y: visible;
+    box-sizing: border-box;
+}
+
+.table-scroll table {
+    margin: 0 !important;
+    border-left-width: 0 !important;
+}
+
+
+/* ============================================================
+   STICKY COLUMNS (VERSÃO FINAL — FUNCIONANDO)
+   ============================================================ */
+
+:root {
+    --col1-width: 0px; /* JS ajusta */
+}
+
+/* COLUNA 1 */
+#table-controle th:nth-child(1),
+#table-controle td:nth-child(1) {
+    position: sticky;
+    left: 0px;                 /* <- sem brecha */
+    background-color: #fff !important;
+    z-index: 102;
+}
+
+/* Coluna 1 — bordas acima */
+#table-controle th:nth-child(1)::after,
+#table-controle td:nth-child(1)::after,
+#table-controle th:nth-child(1)::before,
+#table-controle td:nth-child(1)::before {
+    z-index: 104;
+}
+
+/* COLUNA 2 */
+#table-controle th:nth-child(2),
+#table-controle td:nth-child(2) {
+    position: sticky;
+    left: var(--col1-width) !important;
+    background-color: #fff !important;
+    z-index: 101;
+}
+
+/* bordas da coluna 2 */
+#table-controle th:nth-child(2)::after,
+#table-controle td:nth-child(2)::after {
+    z-index: 103;
+}
+
+/* hover mantém as stickies por cima */
+#table-controle tbody tr:hover td:nth-child(1),
+#table-controle tbody tr:hover td:nth-child(2) {
+    z-index: 112;
+}
+
+
+/* ============================================================
+   SCROLL FIXO NO RODAPÉ
+   ============================================================ */
+
+#scroll-sync {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 16px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 2px;
+    background: #fafafa;
+    border-top: 3px solid #fafafa;
+    border-bottom: 3px solid #fafafa;
+    z-index: 99999;
+    box-shadow: 0 -2px 6px rgba(0,0,0,0.08);
+}
+
+#scroll-sync::-webkit-scrollbar {
+    height: 10px;
+}
+
+#scroll-sync::-webkit-scrollbar-thumb {
+    background: #8b8b8b;
+    border-radius: 5px;
+}
+
+#scroll-sync::-webkit-scrollbar-track {
+    background: #eee;
+}
+
+
+/* ============================================================
+   LEFT WALL (opcional — removido da lógica)
+   ============================================================ */
+
+#table-left-wall {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1px;
+    height: 100%;
+    background: var(--border-color);
+    z-index: 2;
+}
+
+/* ============================================================
+   COLOR MODME
+   ============================================================ */
+
+body[data-layout-color="dark"] #table-controle th:nth-child(1),
+body[data-layout-color="dark"] #table-controle td:nth-child(1),
+body[data-layout-color="dark"] #table-controle th:nth-child(2),
+body[data-layout-color="dark"] #table-controle td:nth-child(2) {
+    background: #37404a !important;
+}
+
+body[data-layout-color="dark"] #table-left-wall {
+    background: #37404a;
+}
+
+body[data-layout-color=dark] table#table-controle td[class*="bg-warning"] {
+    color: #37404a !important;
+}
+
+body[data-layout-color=dark] table#table-controle.table-hover tbody tr:hover>*.bg-success {
+    background-color: #0acf97 !important;
+}
+
+body[data-layout-color=dark] table#table-controle.table-hover tbody tr:hover>*.bg-danger {
+    background-color: #fa5c7c !important;
+}
+
+body[data-layout-color=dark] table#table-controle.table-hover tbody tr:hover>*.bg-warning {
+    background-color: #ffbc00 !important;
+}
+
+body[data-layout-color=dark] table#table-controle.table-hover tbody tr:hover>*.bg-light {
+    background-color: #464f5b !important;
+}
+
+#table-controle .tooltip-inner {
+    --bs-tooltip-font-size: 10px;
+}
+
+
+.card-totalizador {
+    position: relative;
+    border-radius: 5px;
+
+    .card-body {
+        position: relative;
+        overflow: hidden;
+        border-radius: 5px;
+
+        &.bg-warning,
+        &.bg-success,
+        &.bg-danger {
+            color: #fff;
+        }
+
+        .num {
+            font-size: 50px;
+            line-height: 52px;
+        }
+
+        .label {
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        i {
+            font-size: 100px;
+            position: absolute;
+            top: 0;
+            right: -30px;
+            z-index: 0;
+            opacity: .1;
+        }
+
+    }
+}

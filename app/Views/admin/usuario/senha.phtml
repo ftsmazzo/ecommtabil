@@ -1,0 +1,66 @@
+<?php $this->layout("app/template/base"); ?>
+
+<?php $this->start("page-actions") ?>
+<?php $this->end() ?>
+
+<?php $this->start("endScripts") ?>
+<script>window.passwordMinLength = <?= (int)($password_min_length ?? 5) ?>;</script>
+<script>
+    window.adminUsuarioPassFormConfig = {
+        verifyCurrentPasswordUrl: "<?=$router->route("admin.pass.find")?>"
+    };
+</script>
+<script type="text/javascript" src="<?=asset("admin/js/usuario-pass-form.js")?>"></script>
+<?php $this->end() ?>
+
+<form id="form-usuario-senha" class="form-validate" action="<?=$router->route("admin.pass.update")?>" method="POST">
+    <div class="card crud-form-card">
+        <div class="card-body">
+            <div class="crud-section-head">
+                <div class="crud-section-copy">
+                    <h5><i class="uil uil-lock"></i> Trocar Senha</h5>
+                    <small>Ao confirmar a alteração, sua sessão atual será encerrada e será necessário entrar novamente com a nova senha.</small>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-xl-10 col-xxl-7">
+                    <div class="crud-subsection">
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label" title="Campo Obrigatório">Senha Atual <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <input type="password" class="form-control pass border-end-0" name="old" required>
+                                    <span class="input-group-text toggle-pass"><i class="uil-eye"></i></span>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" title="Campo Obrigatório">Nova Senha <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <input type="password" class="form-control pass border-end-0" id="senha" name="senha" required>
+                                    <span class="input-group-text toggle-pass"><i class="uil-eye"></i></span>
+                                </div>
+                                <small class="form-text text-help">Use pelo menos <?= (int)($password_min_length ?? 5) ?> caracteres.</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" title="Campo Obrigatório">Confirmar Nova Senha <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <input type="password" class="form-control pass border-end-0" name="confirm" required>
+                                    <span class="input-group-text toggle-pass"><i class="uil-eye"></i></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <input type="hidden" name="csrf" value="<?=$csrf?>">
+
+            <div class="mt-3 pt-4 border-top">
+                <div class="d-grid gap-2 d-sm-block">
+                    <button class="btn btn-primary btn-main" type="submit">Alterar Senha</button>
+                    <a href="<?=$url_back?>" class="btn btn-white">Cancelar</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>

@@ -1,0 +1,98 @@
+<?php $this->layout("app/template/base"); ?>
+
+<?php $this->start("page-buttons") ?>
+    <a href="<?=$url_back?>" class="btn btn-outline-secondary"><i class="uil uil-arrow-left me-1"></i> Voltar</a>
+    <?php if ($permissao["editar"]): ?>
+        <button type="submit" form="form-indice-editar" class="btn btn-primary"><i class="uil uil-check me-1"></i> Salvar</button>
+    <?php endif ?>
+<?php $this->end() ?>
+
+<div class="row">
+    <!-- Formulário principal -->
+    <div class="col-12 col-lg-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Dados do Índice</h5>
+            </div>
+            <div class="card-body">
+                <form id="form-indice-editar" class="form-validate" action="<?=$url_action?>" method="POST">
+                    <input type="hidden" name="csrf" value="<?=$csrf?>">
+                    <input type="hidden" name="id" value="<?=$indice->hash()?>">
+
+                    <div class="mb-3">
+                        <label for="if-nome" class="form-label" title="Campo Obrigatório">Nome <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="if-nome" name="nome" required value="<?=$indice->nome?>">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="if-sigla" class="form-label" title="Campo Obrigatório">Sigla <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control text-uppercase" id="if-sigla" name="sigla" maxlength="20" required value="<?=$indice->sigla?>">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="if-unidade" class="form-label">Unidade</label>
+                        <input type="text" class="form-control" id="if-unidade" name="unidade" placeholder="%, R$, USD..." maxlength="20" value="<?=$indice->unidade ?? ""?>">
+                    </div>
+
+                    <div class="mb-0">
+                        <label for="if-descricao" class="form-label">Descrição</label>
+                        <textarea class="form-control" id="if-descricao" name="descricao" rows="4"><?=$indice->descricao ?? ""?></textarea>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Histórico inline -->
+    <div class="col-12 col-lg-8 mb-4">
+        <div class="card">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <h5 class="card-title mb-0">Histórico de Valores</h5>
+                <?php if ($permissao["inserir"]): ?>
+                    <button type="button" class="btn btn-sm btn-primary"
+                        data-modal-ajax="<?=$router->route("admin.indice.financeiro.historico.novo", ["id_indice" => $indice->hash()])?>"
+                        data-modal-target="#modal-indice-historico"
+                        data-modal-title="Novo Registro">
+                        <i class="fa fa-plus fa-fw"></i> Adicionar
+                    </button>
+                <?php endif ?>
+            </div>
+            <div class="card-body p-0">
+                <div id="historico-table-wrap">
+                    <?php $this->insert("admin/indice_financeiro/_historico_table", [
+                        "historico" => $historico,
+                        "indice"    => $indice,
+                        "permissao" => $permissao,
+                    ]) ?>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal histórico -->
+<div class="modal fade" id="modal-indice-historico" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body"></div>
+            <div class="modal-footer mt-3">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-primary" form="form-indice-historico"><i class="uil uil-check me-1"></i>Salvar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<?php $this->start("endScripts") ?>
+<script>
+window.indiceFinanceiroConfig = {
+    historicoDeleteUrl: "<?=$router->route("admin.indice.financeiro.historico.delete")?>",
+    csrf: "<?=$csrf?>"
+};
+</script>
+<script src="<?=asset("admin/js/indice-financeiro-form.js")?>"></script>
+<?php $this->end() ?>

@@ -1,0 +1,94 @@
+<?php $this->layout("app/template/base"); ?>
+
+<?php $this->start("endScripts") ?>
+<script>
+    window.adminPerfilFormConfig = {
+        currentProfileId: "<?=$perfil->id?>"
+    };
+</script>
+<script type="text/javascript" src="<?=asset("admin/js/perfil-form.js")?>"></script>
+<?php $this->end() ?>
+
+<form id="form-perfil" class="form-validate" action="<?=$router->route("admin.perfil.update")?>" method="POST">
+    <div class="card crud-form-card">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6 mb-3 mb-md-0">
+                    <div class="crud-subsection">
+                        <label class="form-label">Nome <span class="text-danger">*</span></label>
+                        <input type="text" name="nome" class="form-control" value="<?=$perfil->nome?>" required>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="crud-subsection">
+                        <label class="form-label">Descrição</label>
+                        <input type="text" name="descricao" class="form-control" value="<?=$perfil->descricao?>">
+                    </div>
+                </div>
+            </div>
+
+            <?php if ($usuarios_vinculados > 0) : ?>
+                <div class="alert alert-info mt-3 mb-0 small">
+                    <i class="uil uil-info-circle"></i> Este perfil está vinculado a <?=$usuarios_vinculados?> usuário(s). Alterar o perfil não muda automaticamente as permissões já salvas nesses usuários; ele continua servindo como parametrizacao para novas atribuições e futuras edições manuais.
+                </div>
+            <?php endif ?>
+
+            <input type="hidden" name="csrf" value="<?=$csrf?>">
+            <input type="hidden" name="id" value="<?=md5($perfil->id)?>">
+
+            <div class="mt-3 pt-4 border-top">
+                <div class="d-grid gap-2 d-sm-block">
+                    <button class="btn btn-primary" type="submit">Salvar</button>
+                    <a href="<?=$url_back?>" class="btn btn-white"><i class="uil uil-left"></i> Voltar</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card crud-form-card mt-4">
+        <div class="card-body">
+            <div class="crud-section-head">
+                <div class="crud-section-copy">
+                    <h5><i class="uil uil-unlock"></i> Permissões</h5>
+                    <small>O perfil continua sendo um template. A coleção individual de permissoes do usuario e a fonte final de autorizacao.</small>
+                </div>
+                <div class="text-end">
+                    <div class="form-check d-inline-block">
+                        <input class="form-check-input" type="checkbox" id="p-check-all">
+                        <label class="form-check-label cursor-pointer" for="p-check-all">Marcar Todos</label>
+                    </div>
+                </div>
+            </div>
+            <hr class="mt-2">
+            <div id="permissoes">
+                <?php foreach ($permissoes as $agrupamento => $grupos) : ?>
+                    <div class="bloco">
+                        <h1 class="border-bottom fw-bolder pb-2 text-uppercase group-name permission-group-title"><?=$agrupamento?></h1>
+                        <div class="row">
+                            <?php foreach ($grupos as $grupo => $perm) : ?>
+                                <div class="col-xxl-2 col-lg-3 col-md-4 col-sm-6 col-xs-6 mb-3">
+                                    <div class="permission-block">
+                                        <div class="permission-block-head">
+                                            <h5><?=ucfirst(str_replace("_", " ", $grupo))?></h5>
+                                            <div class="form-check m-0">
+                                                <input class="form-check-input permission-card-toggle" type="checkbox" id="toggle-<?=md5($agrupamento . "-" . $grupo)?>">
+                                            </div>
+                                        </div>
+                                        <div class="ps-3">
+                                            <?php foreach ($perm as $p) : ?>
+                                                <div class="form-check mb-1">
+                                                    <input class="form-check-input" type="checkbox" value="<?=$p->id?>" name="permissoes[]" id="p-<?=$p->id?>" <?=$p->check ? "checked" : ""?>>
+                                                    <label class="form-check-label cursor-pointer" for="p-<?=$p->id?>"><?=$p->descricao?></label>
+                                                </div>
+                                            <?php endforeach ?>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php endforeach ?>
+                        </div>
+                    </div>
+                <?php endforeach ?>
+            </div>
+        </div>
+    </div>
+</form>

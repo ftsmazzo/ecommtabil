@@ -1,0 +1,54 @@
+<?php
+
+$userName = $user->name ?? $user->nickname ?? $user->login ?? 'Usuario';
+$defaultAvatar = asset('common/images/no-photo.png');
+$userAvatar = !empty($user->avatar) && $user->avatar !== $defaultAvatar ? $user->avatar : null;
+$logoutRoute = $router->route($auth->getRouteLogout());
+$avatarClasses = $avatarClasses ?? 'nav-item dropdown ms-lg-3 d-none d-lg-block';
+$showAvatarName = $showAvatarName ?? true;
+?>
+
+<li class="<?= htmlspecialchars($avatarClasses) ?>">
+    <a id="avatar-dropdown" class="nav-link dropdown-toggle pt-1 px-0" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+        <div class="media d-flex align-items-center">
+            <?php if ($userAvatar) : ?>
+                <img class="avatar rounded-circle" alt="<?= htmlspecialchars($userName) ?>" src="<?= htmlspecialchars($userAvatar) ?>">
+            <?php else : ?>
+                <span class="avatar rounded-circle d-inline-flex align-items-center justify-content-center bg-gray-200 text-gray-600">
+                    <i class="uil uil-user-circle"></i>
+                </span>
+            <?php endif ?>
+            <?php if ($showAvatarName) : ?>
+                <div class="media-body ms-2 align-items-center d-none d-lg-block">
+                    <span class="mb-0 font-small fw-bold avatar-name"><?= htmlspecialchars($userName) ?></span>
+                </div>
+            <?php endif ?>
+        </div>
+    </a>
+
+    <div class="dropdown-menu dashboard-dropdown user-dropdown-menu dropdown-menu-end mt-2 py-1">
+        <?php if (!empty($push_public_key) && !empty($user->token)) : ?>
+            <a
+                class="dropdown-item d-flex align-items-center justify-content-between gap-3"
+                href="#"
+                data-webpush-toggle="true"
+                data-user-token="<?= htmlspecialchars($user->token) ?>"
+            >
+                <span class="d-inline-flex align-items-center">
+                    <i class="uil uil-bell me-2 text-primary"></i>
+                    <span>
+                        <span class="d-block">Notificacoes</span>
+                        <small class="text-muted" data-webpush-status-text>Verificando...</small>
+                    </span>
+                </span>
+                <span class="badge filled-outlined bg-secondary" data-webpush-status-badge>...</span>
+            </a>
+            <div class="dropdown-divider my-1"></div>
+        <?php endif ?>
+
+        <a class="dropdown-item d-flex align-items-center" href="#" data-logoff="<?= htmlspecialchars($logoutRoute) ?>">
+            <svg class="dropdown-icon text-danger me-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+            Sair
+        </a>
+    </div>
+</li>

@@ -1,0 +1,94 @@
+<?php $this->layout("app/template/base"); ?>
+
+<?php $this->start("page-actions") ?>
+    <?php if (isset($cartao) && allow("cartao_gerenciar")): ?>
+        <a class="btn btn-primary"  href="<?=$router->route("admin.cartao.hub", ["id" => $d->id])?>"><i class="uil uil-eye"></i> Ver Detalhes</a>
+    <?php endif ?>
+<?php $this->end() ?>
+
+<?php $this->start("endScripts") ?>
+<script>
+window.clienteFormConfig = {
+    findUrl: "<?=$router->route("admin.cliente.find")?>",
+    required: <?=json_encode($required ?? "", JSON_UNESCAPED_UNICODE)?>,
+    estados: <?=json_encode($estados_br ?? [], JSON_UNESCAPED_UNICODE)?>,
+    pessoaFixa: <?=json_encode($pessoa_fixa ?? false)?>,
+    pessoaOpcoes: <?=json_encode($pessoa_opcoes ?? ["F", "J"], JSON_UNESCAPED_UNICODE)?>
+};
+</script>
+<script src="<?=asset("admin/js/cliente-form.js")?>"></script>
+<?php $this->end() ?>
+
+<form id="form-cliente-novo" class="form-validate" action="<?=$router->route("admin.cliente.insert")?>" method="POST">
+    <input type="hidden" name="csrf" value="<?=$csrf?>">
+
+    <div class="card crud-form-card">
+        <div class="card-body">
+            <div class="crud-subsection mb-4">
+                <div class="crud-section-copy mb-3">
+                    <h5>Identificação</h5>
+                    <small>Informe o nome do grupo de clientes.</small>
+                </div>
+
+                <div class="row">
+                    <?php /* Campos ocultos para manter compatibilidade com o banco */ ?>
+                    <input type="hidden" name="pessoa" value="<?=$pessoa_opcoes[0] ?? $pessoa_padrao?>">
+
+                    <div class="col-12 col-lg-8">
+                        <div class="mb-3">
+                            <label for="razao" class="form-label">Nome</label>
+                            <input type="text" class="form-control" id="razao" name="razao" placeholder="Nome do grupo" autocomplete="off" required>
+                        </div>
+                    </div>
+
+                    <?php /*
+                    CAMPOS OCULTOS - mantidos para compatibilidade futura
+
+                    <div class="col-12 col-sm-8 col-md-5 col-lg-5">
+                        CNPJ / CPF (documento)
+                    </div>
+                    <div class="col-12 col-md-4 col-lg-4 col-xl-4">
+                        IE / RG (rg_ie)
+                    </div>
+                    <div class="col-12 col-lg-6">
+                        Nome Fantasia / Apelido (nome)
+                    </div>
+                    <div class="col-12 col-sm-5 col-md-6 col-lg-4 col-xl-3">
+                        Data de Abertura / Nascimento (nascimento)
+                    </div>
+                    <div class="col-12 col-sm-7 col-md-6 col-lg-4 col-xl-3">
+                        Contato (contato)
+                    </div>
+                    <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
+                        Telefone (telefone)
+                    </div>
+                    <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
+                        WhatsApp (whatsapp)
+                    </div>
+                    <div class="col-12 col-lg-8 col-xl-6">
+                        E-mail (email)
+                    </div>
+                    <div class="col-12 col-lg-12 col-xl-6">
+                        Site (site)
+                    </div>
+
+                    SEÇÃO CLASSIFICAÇÃO:
+                    Situação (id_situacao) e Ramo (id_ramo)
+
+                    SEÇÃO ENDEREÇO:
+                    CEP, Logradouro, Número, Complemento, Bairro, Cidade, Estado, País
+
+                    SEÇÃO OBSERVAÇÕES:
+                    Observações (observacoes)
+                    */ ?>
+                </div>
+            </div>
+            <div class="mt-3 pt-4 border-top">
+                <div class="d-grid gap-2 d-sm-block">
+                    <button class="btn btn-primary" type="submit">Salvar</button>
+                    <a href="<?=$url_back?>" class="btn btn-white"><i class="uil uil-left"></i> Voltar</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>

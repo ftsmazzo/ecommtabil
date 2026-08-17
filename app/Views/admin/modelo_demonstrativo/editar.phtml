@@ -1,0 +1,109 @@
+<?php $this->layout("app/template/base"); ?>
+
+<?php $this->start("styles") ?>
+<style>
+    .dre-no-arvore, .dre-no-filhos { list-style: none; padding-left: 0; margin: 0; }
+    .dre-no-filhos { padding-left: 26px; margin-top: 4px; min-height: 8px; }
+
+    .dre-no { margin-bottom: 4px; }
+    .dre-no-linha {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px;
+        border-radius: 6px;
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+    }
+    .dre-no--totalizador > .dre-no-linha { background: #e9ecef; }
+    .dre-no-igual { font-weight: 700; color: #495057; }
+    .dre-no-handle { cursor: grab; color: #adb5bd; }
+    .dre-no-handle:active { cursor: grabbing; }
+    .dre-no-nome, .dre-no-select-conta { flex: 1 1 auto; max-width: 320px; }
+    .dre-no-tipo-select { flex: 0 0 150px; }
+    .dre-no-contas { margin: 4px 0 0 30px; }
+    .dre-no-contas.d-none, .dre-no-add-filho.d-none { display: none !important; }
+
+    .dre-no-ghost { opacity: .4; }
+</style>
+<?php $this->end() ?>
+
+<?php $this->start("page-buttons") ?>
+    <a href="<?=$router->route("admin.modelo.demonstrativo.index")?>" class="btn btn-outline-secondary">
+        <i class="uil uil-arrow-left me-1"></i> Voltar
+    </a>
+    <button type="submit" form="form-modelo-demonstrativo-arvore" class="btn btn-primary">
+        <i class="uil uil-check me-1"></i> Salvar
+    </button>
+<?php $this->end() ?>
+
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex align-items-center gap-2 mb-3">
+            <h6 class="mb-0"><?=htmlspecialchars($modelo->nome, ENT_QUOTES, "UTF-8")?></h6>
+            <span class="badge bg-light text-secondary border"><?=htmlspecialchars($modelo->tipo_demonstrativo, ENT_QUOTES, "UTF-8")?></span>
+        </div>
+
+        <form id="form-modelo-demonstrativo-arvore" action="<?=$url_action?>" method="POST">
+            <input type="hidden" name="csrf" value="<?=$csrf?>">
+            <input type="hidden" name="id" value="<?=$modelo->id?>">
+            <input type="hidden" name="arvore_json" id="dre-arvore-json">
+
+            <div class="mb-3">
+                <button type="button" class="btn btn-sm btn-outline-primary" id="dre-add-raiz">
+                    <i class="uil uil-plus me-1"></i> Adicionar item
+                </button>
+            </div>
+
+            <ul class="dre-no-arvore" id="dre-arvore-raiz">
+                <?php if (!empty($arvore)) : ?>
+                    <?php $this->insert("admin/modelo_demonstrativo/_no", [
+                        "nos"    => $arvore[0] ?? [],
+                        "arvore" => $arvore,
+                    ]) ?>
+                <?php endif ?>
+            </ul>
+
+            <?php if (empty($arvore)) : ?>
+                <div class="text-center text-muted py-5" id="dre-arvore-vazia">
+                    <i class="uil uil-sitemap" style="font-size:2.5rem"></i>
+                    <p class="mt-2 mb-0">Nenhum item cadastrado. Clique em "Adicionar item" para começar.</p>
+                </div>
+            <?php endif ?>
+        </form>
+    </div>
+</div>
+
+<!-- Template de um novo nó (clonado via JS) -->
+<template id="dre-no-template">
+    <li class="dre-no dre-no--organizador" data-tipo="organizador" data-id="">
+        <div class="dre-no-linha">
+            <span class="dre-no-handle"><i class="uil uil-draggabledots"></i></span>
+            <span class="dre-no-igual d-none">=</span>
+            <input type="text" class="form-control form-control-sm dre-no-nome" placeholder="Nome">
+            <select class="form-select form-select-sm dre-no-select-conta d-none"></select>
+            <select class="form-select form-select-sm dre-no-tipo-select">
+                <option value="organizador" selected>Organizador</option>
+                <option value="conta">Plano de Contas</option>
+                <option value="totalizador">Totalizador</option>
+            </select>
+            <button type="button" class="btn btn-sm btn-outline-secondary dre-no-add-filho" title="Adicionar item">
+                <i class="uil uil-plus"></i>
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-danger dre-no-remove" title="Remover">
+                <i class="uil uil-times"></i>
+            </button>
+        </div>
+        <ul class="dre-no-filhos"></ul>
+    </li>
+</template>
+
+<?php $this->start("endScripts") ?>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script>
+window.dreContasDisponiveis = <?=json_encode(array_map(function ($c) {
+    return ["id" => (int) $c->id, "nome" => $c->nome, "tipo" => $c->tipo, "natureza" => $c->natureza];
+}, $contasDisponiveis), JSON_UNESCAPED_UNICODE)?>;
+</script>
+<script src="<?=asset("app/scripts/modelo-demonstrativo.js")?>"></script>
+<?php $this->end() ?>

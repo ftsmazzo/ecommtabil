@@ -1,0 +1,24 @@
+<?php $this->layout("app/template/base"); ?>
+
+<?php $this->start("styles") ?>
+<?php $this->end() ?>
+
+<?php $this->start("startScripts") ?>
+<script src="<?= asset("/dist/webpush/webpush.js")?>"></script>
+<script src="<?= asset("dist/echarts/dist/echarts.min.js") ?>"></script>
+<script>
+    WebPush.init({
+        publicKey: "<?= $vapidKey ?>",
+        autoSubscribe: false,
+        userToken: '<?= $userToken ?>'
+    });
+</script>
+<?php $this->end() ?>
+
+<?php $this->start("endScripts") ?>
+<?php $this->end() ?>
+
+<?php $this->start("page-actions") ?>
+<?php $this->end()?>
+
+<?php flash() ?>

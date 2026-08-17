@@ -1,0 +1,27 @@
+Options -Indexes
+
+RewriteEngine On
+Options All -Indexes
+
+<Files ~ "\.(env|ini|config|yml|cfg|lock)$">
+  Order allow,deny
+  Deny from all
+</Files>
+
+# 🔥 Repassa o header Authorization para o PHP
+SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+
+# ROUTER WWW Redirect.
+# RewriteCond %{HTTP_HOST} !^www\. [NC]
+# RewriteRule ^ https://www.%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# ROUTER HTTPS Redirect
+# Só redireciona quando o proxy (EasyPanel/Traefik) indica HTTP externo.
+# Sem X-Forwarded-Proto (healthcheck interno) não redireciona.
+RewriteCond %{HTTP:X-Forwarded-Proto} =http [NC]
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# ROUTER URL Rewrite
+RewriteCond %{SCRIPT_FILENAME} !-f
+RewriteCond %{SCRIPT_FILENAME} !-d
+RewriteRule ^(.*)$ index.php?route=/$1 [L,QSA]

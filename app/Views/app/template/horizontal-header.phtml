@@ -1,0 +1,61 @@
+<?php
+$menuRenderer = new \App\Services\Menu\MenuRenderer();
+
+$resolveRoute = static function ($route) use ($router) {
+    if (!is_string($route) || $route === '') {
+        return '#';
+    }
+
+    return $router->hasNamedRoute($route) ? $router->route($route) : $route;
+};
+
+$brandRoute = $resolveRoute($layout['topbar-logo-route'] ?? '#');
+$brandLogo = $logo_sidebar ?? $logo_light ?? asset('common/images/no-photo.png');
+$brandLogoMobile = $logo_mobile ?? $brandLogo;
+$showMenuIcons = (bool) ($layout['menu-icons'] ?? true);
+$menuClasses = 'app-horizontal-menu';
+$topbarContainer = $layout['topbar-container'] ?? 'container-fluid';
+$menuContainer = $layout['menu-container'] ?? 'container-fluid';
+
+if (!$showMenuIcons) {
+    $menuClasses .= ' hide-icons';
+}
+?>
+
+<header class="app-header app-header-horizontal d-none d-lg-block">
+    <div class="app-header-top">
+        <div class="<?= htmlspecialchars($topbarContainer) ?> px-3 px-lg-4">
+            <div class="app-header-top__inner">
+                <a href="<?= htmlspecialchars($brandRoute) ?>" class="app-header-brand">
+                    <img src="<?= htmlspecialchars($brandLogo) ?>" alt="Logo" class="d-none d-lg-block">
+                    <img src="<?= htmlspecialchars($brandLogoMobile) ?>" alt="Logo" class="d-lg-none">
+                </a>
+
+                <div class="app-header-actions">
+                    <ul class="navbar-nav align-items-center flex-row">
+                        <?php $this->insert("app/template/notifications-bell", [
+                            'notificationItemClasses' => 'nav-item dropdown',
+                            'notificationLinkClasses' => 'nav-link text-secondary notification-bell unread dropdown-toggle',
+                            'notificationDropdownClasses' => 'dropdown-menu dropdown-menu-end mt-2 py-0',
+                        ]) ?>
+
+                        <?php $this->insert("app/template/avatar", [
+                            'avatarClasses' => 'nav-item dropdown ms-2',
+                            'showAvatarName' => true,
+                        ]) ?>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-header-nav">
+        <div class="<?= htmlspecialchars($menuContainer) ?> px-2">
+            <div id="horizontalMenu" class="app-horizontal-menu-collapse">
+                <ul class="<?= htmlspecialchars($menuClasses) ?>" data-menu-root="primary">
+                    <?= $menuRenderer->render($menu, 1, 'horizontal') ?>
+                </ul>
+            </div>
+        </div>
+    </div>
+</header>

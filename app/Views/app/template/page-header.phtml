@@ -1,0 +1,25 @@
+<?php if (isset($breadcrumb)) : ?>
+<nav aria-label="breadcrumb" class="d-none d-md-inline-block">
+    <ol class="breadcrumb breadcrumb-dark breadcrumb-transparent">
+        <?php foreach ($breadcrumb as $name => $bc) : ?>
+        <li class="breadcrumb-item <?=$bc["current"] ? "active" : ""?>">
+            <?php if (!empty($bc["url"])) : ?>
+                <a href="<?=$bc["url"]?>"><?=$name?></a>
+            <?php else : ?>
+                <a><?=$name?></a>
+            <?php endif ?>
+        </li>
+        <?php endforeach ?>
+    </ol>
+</nav>
+<?php endif ?>
+
+<div class="page-header">
+    <div class="mb-3 mb-lg-0">
+        <h1 class="page-title"><?= $page["title"] ?? "" ?></h1>
+        <p class="page-desc"><?= $page["desc"] ?? "" ?></p>
+    </div>
+    <div class="page-actions">
+        <?php echo $pageActions ?>
+    </div>
+</div>

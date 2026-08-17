@@ -1,0 +1,57 @@
+<?php $this->layout("app/template/base"); ?>
+
+<?php $this->start("styles") ?>
+<link rel="stylesheet" type="text/css" href="<?=asset("dist/dizuploader/dizuploader.min.css")?>">
+<?php $this->end() ?>
+
+<?php $this->start("page-buttons") ?>
+    <?php if ($permissao["inserir"]): ?>
+        <a class="btn btn-primary" href="<?=$router->route("admin.cliente.novo")?>"><i class="fa fa-plus fa-fw"></i> Novo Grupo</a>
+    <?php endif ?>
+<?php $this->end() ?>
+
+<div class="card crud-table-card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover table-sm table-datatable table-datatable-alt crud-table">
+                <thead>
+                    <tr>
+                        <th>Nome</th>
+                        <th>Empresas</th>
+                        <?php if ($permissao["editar"] || $permissao["excluir"]) : ?>
+                            <th class="text-end actions-column"></th>
+                        <?php endif ?>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($dados as $d) : ?>
+                        <tr data-id="<?=$d->id?>">
+                            <td>
+                                <?php if ($permissao["editar"]) : ?>
+                                    <a class="edit" href="<?=$router->route("admin.cliente.editar", ["id" => $d->id])?>"><?=$d->principal_print?></a>
+                                <?php else : ?>
+                                    <span><?=$d->principal_print?></span>
+                                <?php endif ?>
+                            </td>
+                            <td>
+                                <a href="<?=$d->empresas_action?>"><?=$d->empresas_total?></a>
+                            </td>
+                            <?php if ($permissao["editar"] || $permissao["excluir"]) : ?>
+                                <td class="text-end actions-column">
+                                    <div class="table-actions">
+                                        <?php if ($permissao["editar"]): ?>
+                                            <a class="table-action-btn" data-tooltip="true" title="Editar" href="<?=$router->route("admin.cliente.editar", ["id" => $d->id])?>"><i class="uil-edit-alt"></i></a>
+                                        <?php endif ?>
+                                        <?php if ($permissao["excluir"]): ?>
+                                            <button type="button" class="table-action-btn table-action-danger" <?=$d->disabled?> <?php if (empty($d->disabled)) : ?>data-tooltip="true"<?php endif ?> title="<?=$d->title?>" <?=$d->action?>><i class="uil uil-trash"></i></button>
+                                        <?php endif ?>
+                                    </div>
+                                </td>
+                            <?php endif ?>
+                        </tr>
+                    <?php endforeach ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

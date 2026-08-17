@@ -1,0 +1,75 @@
+<form id="form-cashback-regra" class="form-validate" action="<?=$url_action?>" method="POST">
+    <input type="hidden" name="csrf" value="<?=$csrf?>">
+    <?php if (!empty($regra->id)) : ?>
+        <input type="hidden" name="id" value="<?=$regra->hash()?>">
+    <?php endif ?>
+
+    <div class="mb-3">
+        <label for="descricao" class="form-label" title="Campo Obrigatório">Descrição <span class="text-danger">*</span></label>
+        <input type="text" class="form-control input-upper" id="descricao" name="descricao" placeholder="Descrição da regra" required value="<?=$regra->descricao ?? ""?>">
+    </div>
+
+    <div class="row g-3">
+        <div class="col-12 col-md-4">
+            <label for="tipo" class="form-label" title="Campo Obrigatório">Tipo de Reembolso <span class="text-danger">*</span></label>
+            <select name="tipo" id="tipo" class="form-select" required>
+                <option value="PERCENTUAL" <?=(!isset($regra->tipo) || (string) $regra->tipo === "PERCENTUAL") ? "selected" : ""?>>Percentual sobre o gasto</option>
+                <option value="FIXO" <?=isset($regra->tipo) && (string) $regra->tipo === "FIXO" ? "selected" : ""?>>Valor fixo</option>
+            </select>
+        </div>
+
+        <?php
+            $isFixo   = isset($regra->tipo) && (string) $regra->tipo === "FIXO";
+            $valorStr = isset($regra->valor) ? number_format((float) $regra->valor, 2, ",", ".") : "";
+        ?>
+        <div class="col-12 col-md-4">
+            <label for="valor" class="form-label" title="Campo Obrigatório">Valor <span class="text-danger">*</span></label>
+            <div class="valor-group-fixo"<?=$isFixo ? "" : ' style="display:none"'?>>
+                <div class="input-group">
+                    <span class="input-group-text input-group-addon addon-start clean">R$</span>
+                    <input type="tel" id="valor_fixo" name="valor" class="form-control border-start-0 input-money"
+                        placeholder="0,00" <?=$isFixo ? "required" : "disabled"?>
+                        value="<?=$isFixo ? $valorStr : ""?>">
+                </div>
+            </div>
+            <div class="valor-group-pct"<?=$isFixo ? ' style="display:none"' : ""?>>
+                <div class="input-group">
+                    <input type="tel" id="valor_pct" name="valor" class="form-control border-end-0 numeric-comma"
+                        data-limit="1" placeholder="0,00" <?=$isFixo ? "disabled" : "required"?>
+                        value="<?=!$isFixo ? $valorStr : ""?>">
+                    <span class="input-group-text input-group-addon addon-end clean">%</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+            <label for="valor_minimo_recarga" class="form-label">Valor mínimo do gasto</label>
+            <div class="input-group">
+                <span class="input-group-text input-group-addon addon-start clean">R$</span>
+                <input type="tel" class="form-control border-start-0 input-money" id="valor_minimo_recarga" name="valor_minimo_recarga" placeholder="0,00" value="<?=isset($regra->valor_minimo_recarga) && $regra->valor_minimo_recarga !== null ? number_format((float) $regra->valor_minimo_recarga, 2, ",", ".") : ""?>">
+            </div>
+        </div>
+
+        <div class="col-12 col-md-6 col-lg-4">
+            <label for="data_inicio" class="form-label">Início</label>
+            <input type="datetime-local" class="form-control" id="data_inicio" name="data_inicio" data-range-max="#data_fim" value="<?=!empty($regra->data_inicio) ? date("Y-m-d\\TH:i", strtotime((string) $regra->data_inicio)) : ""?>">
+        </div>
+
+        <div class="col-12 col-md-6 col-lg-4">
+            <label for="data_fim" class="form-label">Fim</label>
+            <input type="datetime-local" class="form-control" id="data_fim" name="data_fim" data-range-min="#data_inicio" value="<?=!empty($regra->data_fim) ? date("Y-m-d\\TH:i", strtotime((string) $regra->data_fim)) : ""?>">
+        </div>
+
+        <div class="col-12 col-md-4">
+            <label for="ativo" class="form-label">Ativa</label>
+            <select name="ativo" id="ativo" class="form-select">
+                <option value="1" <?=(!isset($regra->ativo) || (int) $regra->ativo === 1) ? "selected" : ""?>>Sim</option>
+                <option value="0" <?=isset($regra->ativo) && (int) $regra->ativo === 0 ? "selected" : ""?>>Não</option>
+            </select>
+        </div>
+        <div class="col-12">
+            <label for="observacoes" class="form-label">Observações</label>
+            <textarea class="form-control" id="observacoes" name="observacoes" rows="4" placeholder="Observações opcionais"><?=$regra->observacoes ?? ""?></textarea>
+        </div>
+    </div>
+</form>

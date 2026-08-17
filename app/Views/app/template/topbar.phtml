@@ -1,0 +1,55 @@
+<?php $topbarClasses = trim((string) ($topbarClasses ?? '')); ?>
+<nav class="navbar navbar-top navbar-expand navbar-dashboard navbar-dark <?= htmlspecialchars($topbarClasses) ?>">
+  <?php
+    $homeRoute = $router->hasNamedRoute('admin.home') ? $router->route('admin.home') : '#';
+    $currentPath = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '';
+    $homePath = parse_url($homeRoute, PHP_URL_PATH) ?: '';
+    $showTopbarCartaoSearch = $currentPath !== $homePath;
+    $topbarLogoRoute = $layout["topbar-logo-route"] ?? "#";
+    if (is_string($topbarLogoRoute) && $router->hasNamedRoute($topbarLogoRoute)) {
+      $topbarLogoRoute = $router->route($topbarLogoRoute);
+    }
+  ?>
+  <div class="container-fluid px-0">
+    <div class="d-flex justify-content-between align-items-center w-100" id="navbarSupportedContent">
+
+      <!-- ESQUERDA -->
+      <div class="d-flex align-items-center gap-3">
+        <!-- Mobile: logo -->
+        <a href="<?= htmlspecialchars($topbarLogoRoute) ?>" class="navbar-brand d-lg-none mb-0 me-2 p-0 app-mobile-brand">
+          <img src="<?= htmlspecialchars($logo_mobile ?? $logo_sidebar ?? $logo_light ?? '') ?>" height="24" alt="Logo">
+        </a>
+      </div>
+
+      <!-- DIREITA -->
+      <ul class="navbar-nav align-items-center flex-row">
+
+        <!-- Notificações -->
+        <?php $this->insert("app/template/notifications-bell", [
+          'notificationItemClasses' => 'nav-item dropdown',
+          'notificationLinkClasses' => 'nav-link text-secondary notification-bell unread dropdown-toggle',
+          'notificationDropdownClasses' => 'dropdown-menu dropdown-menu-lg dropdown-menu-center mt-2 py-0',
+        ]) ?>
+
+        <!-- Toggle mobile -->
+        <li class="nav-item d-lg-none ms-2">
+          <button class="btn btn-link text-white p-0 d-inline-flex align-items-center justify-content-center"
+                  type="button"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#sidebarMenu"
+                  aria-controls="sidebarMenu"
+                  aria-expanded="false"
+                  aria-label="Abrir menu">
+            <svg class="icon icon-sm" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+              <path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm1 4a1 1 0 100 2h12a1 1 0 100-2H4z" clip-rule="evenodd"></path>
+            </svg>
+          </button>
+        </li>
+
+        <!-- Avatar só desktop -->
+        <?php $this->insert("app/template/avatar") ?>
+
+      </ul>
+    </div>
+  </div>
+</nav>

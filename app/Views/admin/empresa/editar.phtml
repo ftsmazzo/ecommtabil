@@ -1,0 +1,67 @@
+<?php $this->layout("app/template/base"); ?>
+
+<?php $this->start("styles") ?>
+<link rel="stylesheet" href="<?=asset("dist/bootstrap-select/bootstrap-select.min.css")?>">
+<?php $this->end() ?>
+
+<?php $this->start("endScripts") ?>
+<script src="<?=asset("dist/bootstrap-select/bootstrap-select.min.js")?>"></script>
+<script src="<?=asset("dist/bootstrap-select/defaults-pt_BR.min.js")?>"></script>
+<script>
+window.empresaFormConfig = {
+    findUrl: "<?=$router->route("admin.empresa.find")?>",
+    estados: <?=json_encode($estados_br ?? [], JSON_UNESCAPED_UNICODE)?>,
+    responsavelDeleteUrl: "<?=$router->route("admin.empresa.responsavel.delete")?>",
+    csrf: "<?=$csrf?>"
+};
+</script>
+<script src="<?=asset("admin/js/empresa-form.js")?>"></script>
+<?php $this->end() ?>
+
+<form id="form-empresa-editar" class="form-validate" action="<?=$router->route("admin.empresa.update")?>" method="POST">
+    <input type="hidden" name="csrf" value="<?=$csrf?>">
+    <input type="hidden" name="id" value="<?=$empresa->hash()?>">
+    <?php $this->insert("admin/empresa/_form", ["clientes" => $clientes, "empresa" => $empresa, "url_back" => $url_back]) ?>
+</form>
+
+<!-- Responsáveis -->
+<?php if ($permissao_responsavel["gerenciar"] ?? false) : ?>
+<div class="card mt-4">
+    <div class="card-header d-flex align-items-center justify-content-between">
+        <h5 class="card-title mb-0">Responsáveis</h5>
+        <?php if ($permissao_responsavel["inserir"]): ?>
+            <button type="button" class="btn btn-sm btn-primary"
+                data-modal-ajax="<?=$router->route("admin.empresa.responsavel.novo", ["id_empresa" => $empresa->hash()])?>"
+                data-modal-target="#modal-empresa-responsavel"
+                data-modal-title="Novo Responsável">
+                <i class="fa fa-plus fa-fw"></i> Adicionar
+            </button>
+        <?php endif ?>
+    </div>
+    <div class="card-body p-0">
+        <div id="responsaveis-table-wrap">
+            <?php $this->insert("admin/empresa/_responsaveis_table", [
+                "responsaveis" => $responsaveis,
+                "permissao"    => $permissao_responsavel,
+            ]) ?>
+        </div>
+    </div>
+</div>
+<?php endif ?>
+
+<!-- Modal responsável -->
+<div class="modal fade" id="modal-empresa-responsavel" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body"></div>
+            <div class="modal-footer mt-3">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-primary" form="form-empresa-responsavel"><i class="uil uil-check me-1"></i>Salvar</button>
+            </div>
+        </div>
+    </div>
+</div>

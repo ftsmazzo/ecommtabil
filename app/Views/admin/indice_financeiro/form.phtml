@@ -1,0 +1,27 @@
+<form id="form-indice-financeiro" class="form-validate" action="<?=$url_action?>" method="POST">
+    <input type="hidden" name="csrf" value="<?=$csrf?>">
+    <?php if (!empty($indice->id)) : ?>
+        <input type="hidden" name="id" value="<?=$indice->hash()?>">
+    <?php endif ?>
+
+    <div class="row">
+        <div class="col-12 col-sm-8 mb-3">
+            <label for="if-nome" class="form-label" title="Campo Obrigatório">Nome <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="if-nome" name="nome" placeholder="Ex: Índice Nacional de Preços ao Consumidor Amplo" required value="<?=$indice->nome ?? ""?>">
+        </div>
+        <div class="col-12 col-sm-4 mb-3">
+            <label for="if-sigla" class="form-label" title="Campo Obrigatório">Sigla <span class="text-danger">*</span></label>
+            <input type="text" class="form-control text-uppercase" id="if-sigla" name="sigla" placeholder="Ex: IPCA" maxlength="20" required value="<?=$indice->sigla ?? ""?>">
+        </div>
+    </div>
+
+    <div class="mb-3">
+        <label for="if-unidade" class="form-label">Unidade</label>
+        <input type="text" class="form-control" id="if-unidade" name="unidade" placeholder="Ex: %, R$, USD" maxlength="20" value="<?=$indice->unidade ?? ""?>">
+    </div>
+
+    <div class="mb-0">
+        <label for="if-descricao" class="form-label">Descrição</label>
+        <textarea class="form-control" id="if-descricao" name="descricao" rows="3" placeholder="Descrição opcional do índice..."><?=$indice->descricao ?? ""?></textarea>
+    </div>
+</form>

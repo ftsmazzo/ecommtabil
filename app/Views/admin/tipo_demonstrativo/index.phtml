@@ -1,0 +1,74 @@
+<?php $this->layout("app/template/base"); ?>
+
+<?php $this->start("page-buttons") ?>
+    <?php if ($permissao["inserir"]) : ?>
+        <a href="#" class="btn btn-primary"
+            data-modal-ajax="<?=$router->route("admin.dre.tipo.novo")?>"
+            data-modal-target="#modal-dre-tipo"
+            data-modal-title="Novo Tipo de Demonstrativo">
+            <i class="uil uil-plus me-1"></i> Novo Tipo
+        </a>
+    <?php endif ?>
+<?php $this->end() ?>
+
+<div class="card">
+    <div class="card-body py-3">
+        <?php if (empty($dados)) : ?>
+            <div class="text-center text-muted py-5">
+                <i class="uil uil-file-alt" style="font-size:2.5rem"></i>
+                <p class="mt-2 mb-0">Nenhum tipo de demonstrativo cadastrado.</p>
+            </div>
+        <?php else : ?>
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Nome</th>
+                        <th>Sigla</th>
+                        <th class="text-end">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($dados as $d) : ?>
+                        <tr>
+                            <td><?=htmlspecialchars($d->nome, ENT_QUOTES, "UTF-8")?></td>
+                            <td><span class="badge bg-light text-secondary border"><?=strtoupper($d->sigla)?></span></td>
+                            <td class="text-end">
+                                <?php if ($permissao["editar"]) : ?>
+                                    <a href="#" class="btn btn-sm btn-outline-secondary py-0 px-1" title="Editar"
+                                        data-modal-ajax="<?=$router->route("admin.dre.tipo.editar", ["id" => $d->id])?>"
+                                        data-modal-target="#modal-dre-tipo"
+                                        data-modal-title="Editar Tipo de Demonstrativo">
+                                        <i class="uil uil-edit-alt" style="font-size:.8rem"></i>
+                                    </a>
+                                <?php endif ?>
+                                <?php if ($permissao["excluir"]) : ?>
+                                    <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" title="Excluir"
+                                        onclick="confirmDeleteUrl('<?=$router->route("admin.dre.tipo.delete", ["id" => $d->id])?>')">
+                                        <i class="uil uil-trash" style="font-size:.8rem"></i>
+                                    </button>
+                                <?php endif ?>
+                            </td>
+                        </tr>
+                    <?php endforeach ?>
+                </tbody>
+            </table>
+        <?php endif ?>
+    </div>
+</div>
+
+<!-- Modal reutilizável -->
+<div class="modal fade" id="modal-dre-tipo" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-primary" form="form-dre-tipo"><i class="uil uil-check me-1"></i> Salvar</button>
+            </div>
+        </div>
+    </div>
+</div>
