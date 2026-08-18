@@ -6,6 +6,7 @@ use App\Core\ControllerAdmin;
 use App\Core\Data;
 use App\Core\DB;
 use App\Core\Request;
+use App\Models\DreConta;
 use App\Models\Igpm;
 use App\Models\Ipca;
 use App\Models\ModeloDemonstrativo;
@@ -13,6 +14,7 @@ use App\Models\PlanilhaModeloColuna;
 use App\Models\Selic;
 use App\Models\TipoDemonstrativo;
 use App\Services\IgpmService;
+use App\Services\Importacao\PlanilhaImportacaoService;
 use App\Services\IpcaService;
 use App\Services\SelicService;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -64,18 +66,20 @@ class ConfiguracaoController extends ControllerAdmin
             ],
             "page" => [
                 "title" => "Planilha Modelo — " . strtoupper($tipo),
-                "desc"  => "Configure os cabeçalhos da planilha de importação para " . strtoupper($tipo),
+                "desc"  => "Defina os campos que o de-para vai pedir ao importar " . strtoupper($tipo),
             ],
         ]);
 
         $colunas = PlanilhaModeloColuna::porModelo((int) $modelo->id);
 
         echo $this->view->render("admin/configuracao/planilha", [
-            "colunas" => $colunas,
-            "tipo"    => $tipo,
-            "tipos"   => TipoDemonstrativo::options(),
-            "modelo"  => $modelo,
-            "csrf"    => $this->csrf->generate(),
+            "colunas"           => $colunas,
+            "tipo"              => $tipo,
+            "tipos"             => TipoDemonstrativo::options(),
+            "modelo"            => $modelo,
+            "destinosEspeciais" => PlanilhaImportacaoService::destinosEspeciais(),
+            "contas"            => DreConta::analiticasPorTipo($tipo),
+            "csrf"              => $this->csrf->generate(),
         ]);
     }
 

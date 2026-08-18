@@ -4,6 +4,8 @@ namespace App\Services\Importacao;
 
 use App\Core\DB;
 use App\Models\DreConta;
+use App\Models\ModeloDemonstrativo;
+use App\Models\PlanilhaModeloColuna;
 use App\Models\ProjetoLancamento;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -126,24 +128,30 @@ class PlanilhaImportacaoService
      *
      * @param array<int,string> $mapa indice_coluna => destino
      */
-    public function layoutDoMapa(array $mapa): string
+    public function layoutDoMapa(array $mapa, ?int $idContaPadrao = null): string
     {
         $destinos = array_values($mapa);
         $temConta  = in_array(self::DEST_CONTA, $destinos, true);
         $temValor  = in_array(self::DEST_VALOR, $destinos, true);
         $temMatriz = false;
+        $temContaN = false;
         foreach ($destinos as $destino) {
-            if (self::ehDestinoMatriz((string) $destino)) {
+            $destino = (string) $destino;
+            if (self::ehDestinoMatriz($destino)) {
                 $temMatriz = true;
-                break;
+            }
+            if (str_starts_with($destino, "conta_")) {
+                $temContaN = true;
             }
         }
 
-        if ($temConta && $temValor) {
-            return self::LAYOUT_LEDGER;
-        }
         if ($temConta && $temMatriz) {
             return self::LAYOUT_MATRIZ;
+        }
+
+        $temPadrao = $idContaPadrao !== null && $idContaPadrao > 0;
+        if ($temValor && ($temConta || $temPadrao) && !$temContaN) {
+            return self::LAYOUT_LEDGER;
         }
 
         return self::LAYOUT_COLUNAR;
@@ -297,6 +305,9 @@ class PlanilhaImportacaoService
                 } elseif (!isset($campos[self::DEST_DESCRICAO]) && $this->pareceDescricao($h)) {
                     $campos[self::DEST_DESCRICAO] = (int) $i;
                     $usados[$i] = true;
+                } elseif (!isset($campos[self::DEST_VALOR]) && $this->pareceValor($h)) {
+                    $campos[self::DEST_VALOR] = (int) $i;
+                    $usados[$i] = true;
                 } elseif (!isset($campos[self::DEST_UNIDADE]) && $this->pareceUnidade($h)) {
                     $campos[self::DEST_UNIDADE] = (int) $i;
                     $usados[$i] = true;
@@ -342,19 +353,141 @@ class PlanilhaImportacaoService
     }
 
     /**
+     * @return array<int,object>
+     */
+    public function colunasModeloPorTipo(string $tipo): array
+    {
+        try {
+            $modelo = ModeloDemonstrativo::padraoPorTipo($tipo);
+            if (!$modelo) {
+                return [];
+            }
+            return PlanilhaModeloColuna::porModelo((int) $modelo->id);
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    /**
+     * Campos da esquerda no de-para: o que o demonstrativo precisa.
+     *
+     * @param array<string,array<int,object>> $contasGrupos
+     * @return array{parametrizado:bool,campos:array<int,array{destino:string,label:string,hint:string,grupo:string,busca:string}>}
+     */
+    public function camposDePara(string $tipo, array $contasGrupos = []): array
+    {
+        $colunasModelo = $this->colunasModeloPorTipo($tipo);
+        $campos        = [];
+
+        foreach ($colunasModelo as $col) {
+            $destino = trim((string) ($col->campo_dre ?? ""));
+            if ($destino === "") {
+                continue;
+            }
+            $label = trim((string) ($col->descricao ?? $destino));
+            $hint  = trim((string) ($col->helper ?? ""));
+            $campos[] = [
+                "destino" => $destino,
+                "label"   => $label !== "" ? $label : $destino,
+                "hint"    => $hint,
+                "grupo"   => "modelo",
+                "busca"   => mb_strtolower($label . " " . $destino, "UTF-8"),
+            ];
+        }
+
+        $parametrizado = $campos !== [];
+
+        if (!$parametrizado) {
+            $padrao = [
+                [self::DEST_PERIODO,   "Período / Data",              "Ex.: coluna Data da Shopee ou competência"],
+                [self::DEST_DESCRICAO, "Descrição",                   "Ex.: produto, histórico, observações"],
+                [self::DEST_VALOR,     "Valor",                       "Ex.: coluna Total, Valor, Receita"],
+                [self::DEST_UNIDADE,   "Unidade / Centro de custo",   "Opcional"],
+                [self::DEST_CONTA,     "Conta (texto na planilha)",   "Se cada linha traz o nome ou código da conta"],
+            ];
+            foreach ($padrao as [$destino, $label, $hint]) {
+                $campos[] = [
+                    "destino" => $destino,
+                    "label"   => $label,
+                    "hint"    => $hint,
+                    "grupo"   => "modelo",
+                    "busca"   => mb_strtolower($label, "UTF-8"),
+                ];
+            }
+        }
+
+        return [
+            "parametrizado" => $parametrizado,
+            "campos"        => $campos,
+        ];
+    }
+
+    /**
+     * Casa o cabeçalho da planilha com a descrição da Planilha Modelo.
+     *
+     * @param array<int,string> $headers
+     * @param array<int,object> $colunasModelo
+     * @return array{campos: array<string,int>, periodos_matriz: array}
+     */
+    public function sugerirPeloModelo(array $headers, array $colunasModelo): array
+    {
+        $campos = [];
+        $usados = [];
+
+        foreach ($colunasModelo as $col) {
+            $destino = trim((string) ($col->campo_dre ?? ""));
+            $alvo    = $this->normalizar((string) ($col->descricao ?? ""));
+            if ($destino === "" || $alvo === "") {
+                continue;
+            }
+            foreach ($headers as $i => $h) {
+                $i = (int) $i;
+                if (isset($usados[$i])) {
+                    continue;
+                }
+                if ($this->normalizar((string) $h) === $alvo) {
+                    $campos[$destino] = $i;
+                    $usados[$i] = true;
+                    break;
+                }
+            }
+        }
+
+        return [
+            "campos"          => $campos,
+            "periodos_matriz" => [],
+        ];
+    }
+
+    /**
+     * @return array<string,string>
+     */
+    public static function destinosEspeciais(): array
+    {
+        return [
+            self::DEST_PERIODO   => "Período / Data",
+            self::DEST_DESCRICAO => "Descrição",
+            self::DEST_VALOR     => "Valor",
+            self::DEST_UNIDADE   => "Unidade / Centro de custo",
+            self::DEST_CONTA     => "Conta (texto na linha)",
+        ];
+    }
+
+    /**
      * @param array<int,string> $mapa
      * @return array{ok:bool,erro?:string}
      */
-    public function validar(array $mapa, string $layout): array
+    public function validar(array $mapa, string $layout, ?int $idContaPadrao = null): array
     {
         $destinos = array_values($mapa);
+        $temPadrao = $idContaPadrao !== null && $idContaPadrao > 0;
 
         if ($layout === self::LAYOUT_LEDGER) {
-            if (!in_array(self::DEST_CONTA, $destinos, true)) {
-                return ["ok" => false, "erro" => "No formato por lançamento, mapeie a coluna da conta."];
-            }
             if (!in_array(self::DEST_VALOR, $destinos, true)) {
-                return ["ok" => false, "erro" => "No formato por lançamento, mapeie a coluna do valor."];
+                return ["ok" => false, "erro" => "Mapeie a coluna do valor (ex.: Total da Shopee)."];
+            }
+            if (!in_array(self::DEST_CONTA, $destinos, true) && !$temPadrao) {
+                return ["ok" => false, "erro" => "Mapeie a coluna com o nome da conta, ou escolha em qual conta do plano lançar o valor."];
             }
             return ["ok" => true];
         }
@@ -382,7 +515,11 @@ class PlanilhaImportacaoService
             }
         }
 
-        return ["ok" => false, "erro" => "Mapeie ao menos uma conta do plano para uma coluna da planilha."];
+        if (in_array(self::DEST_VALOR, $destinos, true) && $temPadrao) {
+            return ["ok" => true];
+        }
+
+        return ["ok" => false, "erro" => "Diga de qual coluna vem o valor e em qual conta lançar, ou mapeie as contas do plano."];
     }
 
     /**
@@ -396,12 +533,13 @@ class PlanilhaImportacaoService
         int $idProjeto,
         string $tipo,
         int $idUsuario,
-        bool $gravar = true
+        bool $gravar = true,
+        ?int $idContaPadrao = null
     ): array {
         $this->gravar   = $gravar;
         $this->amostras = [];
 
-        $layout = $this->layoutDoMapa($mapa);
+        $layout = $this->layoutDoMapa($mapa, $idContaPadrao);
         $aberto = $this->abrir($caminho);
         $sheet  = $aberto["spreadsheet"]->getSheet($aba);
         $info   = $this->lerCabecalhos($sheet, 0);
@@ -411,7 +549,7 @@ class PlanilhaImportacaoService
 
         $executar = function () use (
             $sheet, $mapa, $headers, $highestRow, $highestCol,
-            $idProjeto, $tipo, $aba, $idUsuario, $layout
+            $idProjeto, $tipo, $aba, $idUsuario, $layout, $idContaPadrao
         ) {
             if ($this->gravar) {
                 ProjetoLancamento::limparPorProjeto($idProjeto, $tipo, $aba);
@@ -422,7 +560,7 @@ class PlanilhaImportacaoService
             if ($layout === self::LAYOUT_LEDGER) {
                 [$inseridos, $ignorados, $naoAcharam] = $this->processarLedger(
                     $sheet, $mapa, $indicePorDestino, $headers, $highestRow, $highestCol,
-                    $idProjeto, $tipo, $aba, $idUsuario
+                    $idProjeto, $tipo, $aba, $idUsuario, $idContaPadrao
                 );
             } elseif ($layout === self::LAYOUT_MATRIZ) {
                 [$inseridos, $ignorados, $naoAcharam] = $this->processarMatriz(
@@ -639,13 +777,22 @@ class PlanilhaImportacaoService
         int $idProjeto,
         string $tipo,
         int $aba,
-        int $idUsuario
+        int $idUsuario,
+        ?int $idContaPadrao = null
     ): array {
         $colConta   = isset($indicePorDestino[self::DEST_CONTA]) ? (int) $indicePorDestino[self::DEST_CONTA] : null;
         $colValor   = isset($indicePorDestino[self::DEST_VALOR]) ? (int) $indicePorDestino[self::DEST_VALOR] : null;
         $colPeriodo = isset($indicePorDestino[self::DEST_PERIODO]) ? (int) $indicePorDestino[self::DEST_PERIODO] : null;
         $colDesc    = isset($indicePorDestino[self::DEST_DESCRICAO]) ? (int) $indicePorDestino[self::DEST_DESCRICAO] : null;
         $colUnid    = isset($indicePorDestino[self::DEST_UNIDADE]) ? (int) $indicePorDestino[self::DEST_UNIDADE] : null;
+
+        $contaFixa = null;
+        if ($idContaPadrao) {
+            $contaFixa = DreConta::find($idContaPadrao);
+            if ($contaFixa && ((string) ($contaFixa->tipo ?? "") !== "analitica" || (int) ($contaFixa->trash ?? 0) === 1)) {
+                $contaFixa = null;
+            }
+        }
 
         $inseridos  = 0;
         $ignorados  = 0;
@@ -657,23 +804,40 @@ class PlanilhaImportacaoService
                 continue;
             }
 
-            $nomeConta = trim((string) $this->celulaDaLinha($linha, $colConta));
-            $valor     = $this->parseValor((string) $this->celulaDaLinha($linha, $colValor));
-            if ($nomeConta === "" || $valor === null || $this->pareceLinhaResumo($nomeConta)) {
+            $valor = $this->parseValor((string) $this->celulaDaLinha($linha, $colValor));
+            if ($valor === null) {
                 $ignorados++;
                 continue;
             }
 
-            $conta = DreConta::buscarAnaliticaPorTexto($tipo, $nomeConta);
-            if (!$conta) {
-                $naoAcharam[$nomeConta] = true;
-                $ignorados++;
-                continue;
+            $nomeConta = $colConta !== null
+                ? trim((string) $this->celulaDaLinha($linha, $colConta))
+                : "";
+
+            if ($colConta !== null) {
+                if ($nomeConta === "" || $this->pareceLinhaResumo($nomeConta)) {
+                    $ignorados++;
+                    continue;
+                }
+                $conta = DreConta::buscarAnaliticaPorTexto($tipo, $nomeConta);
+                if (!$conta) {
+                    $naoAcharam[$nomeConta] = true;
+                    $ignorados++;
+                    continue;
+                }
+            } else {
+                $conta = $contaFixa;
+                if (!$conta) {
+                    $ignorados++;
+                    continue;
+                }
             }
 
             $periodo = $colPeriodo !== null
                 ? $this->parsePeriodo((string) $this->celulaDaLinha($linha, $colPeriodo), (string) ($headers[$colPeriodo] ?? ""))
                 : null;
+
+            $rotulo = trim((string) ($conta->codigo ?? "") . " — " . (string) ($conta->nome ?? $nomeConta));
 
             $this->gravarLancamento(
                 $idProjeto,
@@ -685,9 +849,9 @@ class PlanilhaImportacaoService
                 $valor,
                 $colUnid !== null ? $this->textoOuNulo($this->celulaDaLinha($linha, $colUnid)) : null,
                 $r,
-                self::DEST_CONTA,
+                $colConta !== null ? self::DEST_CONTA : self::DEST_VALOR,
                 $idUsuario,
-                trim((string) ($conta->codigo ?? "") . " — " . (string) ($conta->nome ?? $nomeConta))
+                $rotulo
             );
             $inseridos++;
         }
@@ -961,12 +1125,13 @@ class PlanilhaImportacaoService
 
     private function pareceValor(string $n): bool
     {
-        return in_array($n, ["valor", "valortotal", "vlr", "amount", "valorrs"], true);
+        return in_array($n, ["valor", "valortotal", "vlr", "amount", "valorrs", "total", "preco", "receita"], true)
+            || str_contains($n, "valortotal");
     }
 
     private function pareceDescricao(string $n): bool
     {
-        return in_array($n, ["descricao", "historico", "observacao", "obs", "detalhe"], true);
+        return in_array($n, ["descricao", "historico", "observacao", "obs", "detalhe", "produto", "item", "nomeproduto"], true);
     }
 
     private function pareceUnidade(string $n): bool

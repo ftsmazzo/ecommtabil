@@ -345,11 +345,17 @@ class ProjetoController extends ControllerAdmin
             ? $data->tipo_demonstrativo
             : TipoDemonstrativo::padrao()?->sigla;
 
+        $origem = in_array((string) ($data->origem ?? ""), ["template", "livre"], true)
+            ? (string) $data->origem
+            : "livre";
+
         $this->session->set("planilha_upload", [
-            "arquivo"  => $nome,
-            "original" => $file["name"],
-            "tipo"     => $tipoDemo,
-            "projeto"  => $projeto->id,
+            "arquivo"       => $nome,
+            "original"      => $file["name"],
+            "tipo"          => $tipoDemo,
+            "projeto"       => $projeto->id,
+            "origem"        => $origem,
+            "conta_padrao"  => null,
         ]);
 
         $this->router->redirect("admin.projeto.importacao.mapear", ["id" => $projeto->id]);
@@ -406,18 +412,32 @@ class ProjetoController extends ControllerAdmin
 
             $contasGrupos = DreConta::analiticasPorTipo($upload->tipo);
             $contasLista  = DreConta::analiticasLista($upload->tipo);
+            $dePara       = $svc->camposDePara((string) $upload->tipo, $contasGrupos);
+            $contaPadrao  = $this->contaPadraoDoUpload($upload);
 
             $mapaSalvo = ProjetoMapeamentoColuna::porProjeto((int) $projeto->id, (string) $upload->tipo, $abaAtiva);
             $layoutDetectado = $svc->detectarLayout($headers);
 
             if ($mapaSalvo) {
-                $layout          = $svc->layoutDoMapa($mapaSalvo);
-                $expandido       = $svc->expandirMapa($mapaSalvo);
+                $layout           = $svc->layoutDoMapa($mapaSalvo, $contaPadrao);
+                $expandido        = $svc->expandirMapa($mapaSalvo);
                 $origemMapeamento = "salvo";
             } else {
-                $layout           = $layoutDetectado;
-                $expandido        = $svc->sugerirCampos($headers, $layout, $contasLista);
-                $origemMapeamento = ($expandido["campos"] || $expandido["periodos_matriz"]) ? "sugerido" : "vazio";
+                $expandido        = ["campos" => [], "periodos_matriz" => [], "ano_base" => (int) date("Y")];
+                $origemMapeamento = "vazio";
+                $colunasModelo    = $svc->colunasModeloPorTipo((string) $upload->tipo);
+                if (($upload->origem ?? "") === "template" && $colunasModelo) {
+                    $peloModelo = $svc->sugerirPeloModelo($headers, $colunasModelo);
+                    if (!empty($peloModelo["campos"])) {
+                        $expandido        = $peloModelo + ["ano_base" => (int) date("Y")];
+                        $origemMapeamento = "sugerido";
+                    }
+                }
+                if (empty($expandido["campos"])) {
+                    $expandido        = $svc->sugerirCampos($headers, $layoutDetectado, $contasLista);
+                    $origemMapeamento = ($expandido["campos"] || $expandido["periodos_matriz"]) ? "sugerido" : "vazio";
+                }
+                $layout = $layoutDetectado;
             }
 
             $campos         = $expandido["campos"];
@@ -441,11 +461,11 @@ class ProjetoController extends ControllerAdmin
                 "Projetos"              => ["url" => $this->router->route("admin.projeto.index"), "current" => false],
                 $projetoLabel           => ["url" => $this->router->route("admin.projeto.abrir", ["id" => $projeto->id]), "current" => false],
                 "Importação"            => ["url" => $this->router->route("admin.projeto.importacao", ["id" => $projeto->id]), "current" => false],
-                "Mapeamento de Colunas" => ["url" => false, "current" => true],
+                "De-para"               => ["url" => false, "current" => true],
             ],
             "page" => [
-                "title" => "Mapeamento de Colunas",
-                "desc"  => $projetoLabel . " — " . strtoupper($upload->tipo),
+                "title" => "De-para de colunas",
+                "desc"  => $projetoLabel . " — " . strtoupper($upload->tipo) . ": o que o demonstrativo precisa × coluna da planilha",
             ],
         ]);
 
@@ -460,6 +480,9 @@ class ProjetoController extends ControllerAdmin
             "previews"              => $previews,
             "colunas"               => $colunas,
             "contas"                => $contasGrupos,
+            "camposModelo"          => $dePara["campos"],
+            "modeloParametrizado"   => $dePara["parametrizado"],
+            "contaPadrao"           => $contaPadrao,
             "tipos"                 => TipoDemonstrativo::options(),
             "layout"                => $layout,
             "layoutDetectado"       => $layoutDetectado,
@@ -561,6 +584,11 @@ class ProjetoController extends ControllerAdmin
             $anoBase = (int) date("Y");
         }
 
+        $contaPadrao = (int) ($data->conta_padrao ?? 0);
+        if ($contaPadrao <= 0) {
+            $contaPadrao = null;
+        }
+
         $linhas = $svc->compactarCampos(
             (array) ($data->campos ?? []),
             $headers,
@@ -573,8 +601,8 @@ class ProjetoController extends ControllerAdmin
             $mapa[(int) $linha["indice_coluna"]] = $linha["mapeamento"];
         }
 
-        $layout   = $svc->layoutDoMapa($mapa);
-        $validado = $svc->validar($mapa, $layout);
+        $layout   = $svc->layoutDoMapa($mapa, $contaPadrao);
+        $validado = $svc->validar($mapa, $layout, $contaPadrao);
         if (!$validado["ok"]) {
             $this->message->warning($validado["erro"] ?? "Mapeamento incompleto.");
             $this->router->redirect("admin.projeto.importacao.mapear", ["id" => $projeto->id]);
@@ -597,6 +625,8 @@ class ProjetoController extends ControllerAdmin
                 "mapeamento"         => $linha["mapeamento"],
             ]);
         }
+
+        $this->atualizarUploadSessao($upload, ["conta_padrao" => $contaPadrao]);
 
         $this->message->success("Mapeamento salvo com sucesso");
         $this->router->redirect("admin.projeto.importacao.mapear", ["id" => $projeto->id, "aba" => $aba]);
@@ -634,15 +664,16 @@ class ProjetoController extends ControllerAdmin
             return;
         }
 
-        $svc  = new PlanilhaImportacaoService();
-        $mapa = ProjetoMapeamentoColuna::porProjeto((int) $projeto->id, (string) $tipo, $aba);
+        $svc         = new PlanilhaImportacaoService();
+        $mapa        = ProjetoMapeamentoColuna::porProjeto((int) $projeto->id, (string) $tipo, $aba);
+        $contaPadrao = $this->contaPadraoDoUpload($upload);
         if (empty($mapa)) {
             $this->message->warning("Nenhum mapeamento salvo para esta aba. Salve o mapeamento primeiro.");
             $this->router->redirect("admin.projeto.importacao.mapear", ["id" => $projeto->id, "aba" => $aba]);
             return;
         }
 
-        $validado = $svc->validar($mapa, $svc->layoutDoMapa($mapa));
+        $validado = $svc->validar($mapa, $svc->layoutDoMapa($mapa, $contaPadrao), $contaPadrao);
         if (!$validado["ok"]) {
             $this->message->warning($validado["erro"] ?? "Mapeamento incompleto.");
             $this->router->redirect("admin.projeto.importacao.mapear", ["id" => $projeto->id, "aba" => $aba]);
@@ -656,7 +687,9 @@ class ProjetoController extends ControllerAdmin
                 $mapa,
                 (int) $projeto->id,
                 (string) $tipo,
-                (int) $this->user->uid
+                (int) $this->user->uid,
+                true,
+                $contaPadrao
             );
 
             if ($resultado["inseridos"] === 0) {
@@ -702,14 +735,15 @@ class ProjetoController extends ControllerAdmin
             return;
         }
 
-        $svc  = new PlanilhaImportacaoService();
-        $mapa = ProjetoMapeamentoColuna::porProjeto((int) $projeto->id, (string) $tipo, $aba);
+        $svc         = new PlanilhaImportacaoService();
+        $mapa        = ProjetoMapeamentoColuna::porProjeto((int) $projeto->id, (string) $tipo, $aba);
+        $contaPadrao = $this->contaPadraoDoUpload($upload);
         if (empty($mapa)) {
             echo json_encode(["ok" => false, "error" => "Salve o mapeamento antes de conferir."]);
             return;
         }
 
-        $validado = $svc->validar($mapa, $svc->layoutDoMapa($mapa));
+        $validado = $svc->validar($mapa, $svc->layoutDoMapa($mapa, $contaPadrao), $contaPadrao);
         if (!$validado["ok"]) {
             echo json_encode(["ok" => false, "error" => $validado["erro"] ?? "Mapeamento incompleto."]);
             return;
@@ -723,7 +757,8 @@ class ProjetoController extends ControllerAdmin
                 (int) $projeto->id,
                 (string) $tipo,
                 (int) $this->user->uid,
-                false
+                false,
+                $contaPadrao
             );
             echo json_encode(["ok" => true] + $resultado, JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
@@ -769,24 +804,22 @@ class ProjetoController extends ControllerAdmin
             $linhasColunas[] = "  [{$i}] {$letra} — " . trim((string) $h);
         }
 
+        $dePara = $svc->camposDePara((string) $upload->tipo, DreConta::analiticasPorTipo($upload->tipo));
         $camposSistema = [];
-        if ($layout === PlanilhaImportacaoService::LAYOUT_LEDGER) {
-            $camposSistema[] = "__periodo__ → Período / Competência";
-            $camposSistema[] = "__conta__ → Nome ou código da conta (texto da célula)";
-            $camposSistema[] = "__valor__ → Valor do lançamento";
-            $camposSistema[] = "__descricao__ → Descrição / Histórico (opcional)";
-            $camposSistema[] = "__unidade__ → Unidade / Centro de custo (opcional)";
-        } elseif ($layout === PlanilhaImportacaoService::LAYOUT_MATRIZ) {
-            $camposSistema[] = "__conta__ → Coluna com o nome ou código da conta";
-            $camposSistema[] = "periodos_matriz → índices das colunas de período/ano (valores)";
-        } else {
-            $camposSistema[] = "__periodo__ → Período / Competência";
-            $camposSistema[] = "__descricao__ → Descrição / Histórico (opcional)";
-            $camposSistema[] = "__unidade__ → Unidade / Centro de custo (opcional)";
-            foreach ($contas as $conta) {
-                $camposSistema[] = "conta_{$conta->id} → {$conta->codigo} — {$conta->nome}";
-            }
+        foreach ($dePara["campos"] as $campo) {
+            $camposSistema[] = $campo["destino"] . " → " . $campo["label"];
         }
+        $camposSistema[] = "__periodo__ → Período / Data";
+        $camposSistema[] = "__descricao__ → Descrição";
+        $camposSistema[] = "__valor__ → Valor";
+        $camposSistema[] = "__unidade__ → Unidade / Centro de custo";
+        $camposSistema[] = "__conta__ → Nome ou código da conta (texto da célula)";
+        foreach ($contas as $conta) {
+            $camposSistema[] = "conta_{$conta->id} → {$conta->codigo} — {$conta->nome}";
+        }
+        $camposSistema[] = "periodos_matriz → índices das colunas que são anos/meses (matriz)";
+
+        $camposSistema = array_values(array_unique($camposSistema));
 
         $systemPrompt = <<<PROMPT
 Você é um assistente especialista em contabilidade e finanças empresariais (DRE, DFC, Balanço).
@@ -802,7 +835,8 @@ Formato exatamente:
 PROMPT;
 
         $prompt  = "Tipo de demonstrativo: " . strtoupper((string) $upload->tipo) . "\n";
-        $prompt .= "Layout: {$layout}\n\n";
+        $prompt .= "A planilha pode ser de marketplace (Shopee, Mercado Livre), ERP ou o template do sistema.\n";
+        $prompt .= "Priorize: Data/Período, Descrição/Produto, Valor/Total. Só use conta_N se o cabeçalho for claramente essa conta.\n\n";
         $prompt .= "Colunas da planilha:\n" . implode("\n", $linhasColunas) . "\n\n";
         $prompt .= "Campos do sistema:\n" . implode("\n", $camposSistema);
 
@@ -858,15 +892,13 @@ PROMPT;
             }
 
             $periodos = [];
-            if ($layout === PlanilhaImportacaoService::LAYOUT_MATRIZ) {
-                foreach ($matrizBrutos as $indice) {
-                    $indice = (int) $indice;
-                    if ($indice < 0 || $indice > $maxIndice || isset($usados[$indice])) {
-                        continue;
-                    }
-                    $periodos[] = $indice;
-                    $usados[$indice] = true;
+            foreach ($matrizBrutos as $indice) {
+                $indice = (int) $indice;
+                if ($indice < 0 || $indice > $maxIndice || isset($usados[$indice])) {
+                    continue;
                 }
+                $periodos[] = $indice;
+                $usados[$indice] = true;
             }
 
             echo json_encode([
@@ -878,6 +910,24 @@ PROMPT;
         } catch (\Throwable $e) {
             echo json_encode(["ok" => false, "error" => $e->getMessage()]);
         }
+    }
+
+    private function contaPadraoDoUpload(object $upload): ?int
+    {
+        $id = (int) ($upload->conta_padrao ?? 0);
+        return $id > 0 ? $id : null;
+    }
+
+    private function atualizarUploadSessao(object $upload, array $extra): void
+    {
+        $this->session->set("planilha_upload", array_merge([
+            "arquivo"      => $upload->arquivo ?? "",
+            "original"     => $upload->original ?? "",
+            "tipo"         => $upload->tipo ?? "",
+            "projeto"      => $upload->projeto ?? 0,
+            "origem"       => $upload->origem ?? "livre",
+            "conta_padrao" => $upload->conta_padrao ?? null,
+        ], $extra));
     }
 
     private function rememberVisitedProject(object $projeto): void
