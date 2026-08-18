@@ -1,5 +1,9 @@
 <?php
+$openaiKey = getenv("OPENAI_API_KEY")
+    ?: ($_ENV["OPENAI_API_KEY"] ?? "")
+    ?: ($_SERVER["OPENAI_API_KEY"] ?? "");
+
 return [
-    "openai_key" => "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",
-    "model" => "gpt-5-mini",
+    "openai_key" => $openaiKey,
+    "model"      => getenv("OPENAI_MODEL") ?: "gpt-5-mini",
 ];
