@@ -846,10 +846,9 @@ class PlanilhaImportacaoService
             $raw = $m[1];
             $negativo = true;
         }
-        $raw = ltrim($raw, "−–—");
-        if (str_starts_with($raw, "-") || str_starts_with(trim((string) $raw), "−")) {
+        if (preg_match('/^[\-\x{2212}\x{2013}\x{2014}]/u', $raw)) {
             $negativo = true;
-            $raw = ltrim($raw, "-−–— ");
+            $raw = preg_replace('/^[\-\x{2212}\x{2013}\x{2014}\s]+/u', '', $raw) ?? $raw;
         }
 
         $raw = str_replace(["R$", " ", "\xc2\xa0"], "", $raw);
