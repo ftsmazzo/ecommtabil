@@ -719,8 +719,30 @@ class PlanilhaImportacaoService
             return null;
         }
 
-        if (preg_match('/^\d{4}-\d{2}-\d{2}/', $raw, $m)) {
-            return substr($m[0], 0, 10);
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})/', $raw, $m)) {
+            return $m[1] . "-" . $m[2] . "-" . $m[3];
+        }
+
+        $meses = $this->mapaMeses();
+
+        // Mercado Livre: "31 de março de 2024" / "31 de marzo de 2024"
+        if (preg_match('/(\d{1,2})\s+de\s+([a-zà-úç]+)\s+(?:de\s+)?(\d{4})/iu', $raw, $m)) {
+            $mes = $this->numeroMes((string) $m[2], $meses);
+            if ($mes) {
+                return $m[3] . "-" . $mes . "-" . str_pad($m[1], 2, "0", STR_PAD_LEFT);
+            }
+        }
+
+        if (preg_match('/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/', $raw, $m)) {
+            $ano = strlen($m[3]) === 2 ? "20" . $m[3] : $m[3];
+            $dia = (int) $m[1];
+            $mes = (int) $m[2];
+            if ($mes > 12 && $dia <= 12) {
+                [$dia, $mes] = [$mes, $dia];
+            }
+            if ($mes >= 1 && $mes <= 12 && $dia >= 1 && $dia <= 31) {
+                return sprintf("%s-%02d-%02d", $ano, $mes, $dia);
+            }
         }
 
         if (preg_match('/^(\d{1,2})[\/\-.](\d{2,4})$/', $raw, $m)) {
@@ -729,13 +751,32 @@ class PlanilhaImportacaoService
             return "{$ano}-{$mes}-01";
         }
 
-        if (preg_match('/^(\d{2})[\/\-.](\d{2})[\/\-.](\d{4})$/', $raw, $m)) {
-            return "{$m[3]}-{$m[2]}-01";
-        }
-
         if (preg_match('/^(\d{4})[\/\-.](\d{1,2})$/', $raw, $m)) {
             $mes = str_pad($m[2], 2, "0", STR_PAD_LEFT);
             return "{$m[1]}-{$mes}-01";
+        }
+
+        $n = $this->normalizar($raw);
+        foreach ($meses as $nome => $num) {
+            if ($nome === "" || !str_contains($n, $nome)) {
+                continue;
+            }
+            $ano = null;
+            if (preg_match('/(20\d{2})/', $raw, $am)) {
+                $ano = $am[1];
+            } elseif (preg_match('/(\d{2})$/', $raw, $am)) {
+                $ano = "20" . $am[1];
+            } elseif ($anoBase) {
+                $ano = (string) $anoBase;
+            }
+            if (!$ano) {
+                return null;
+            }
+            $dia = "01";
+            if (preg_match('/^(\d{1,2})\D/', $raw, $dm)) {
+                $dia = str_pad($dm[1], 2, "0", STR_PAD_LEFT);
+            }
+            return "{$ano}-{$num}-{$dia}";
         }
 
         if (preg_match('/^(20\d{2})(?:\D+(\d{1,2}))?/', $raw, $m)) {
@@ -743,45 +784,53 @@ class PlanilhaImportacaoService
             return "{$m[1]}-{$mes}-01";
         }
 
-        $meses = [
-            "jan" => "01", "janeiro" => "01",
-            "fev" => "02", "fevereiro" => "02",
-            "mar" => "03", "marco" => "03", "março" => "03",
-            "abr" => "04", "abril" => "04",
-            "mai" => "05", "maio" => "05",
-            "jun" => "06", "junho" => "06",
-            "jul" => "07", "julho" => "07",
-            "ago" => "08", "agosto" => "08",
-            "set" => "09", "setembro" => "09",
-            "out" => "10", "outubro" => "10",
-            "nov" => "11", "novembro" => "11",
-            "dez" => "12", "dezembro" => "12",
-        ];
-        $n = $this->normalizar($raw);
-        foreach ($meses as $nome => $num) {
-            if (str_starts_with($n, $nome)) {
-                $ano = null;
-                if (preg_match('/(20\d{2}|\d{2})$/', $raw, $am)) {
-                    $ano = strlen($am[1]) === 2 ? "20" . $am[1] : $am[1];
-                } elseif ($anoBase) {
-                    $ano = (string) $anoBase;
-                }
-                if (!$ano) {
-                    return null;
-                }
-                return "{$ano}-{$num}-01";
-            }
-        }
-
         if (is_numeric($raw) && (float) $raw > 20000) {
             try {
                 $ts = ExcelDate::excelToTimestamp((int) $raw);
-                return date("Y-m-01", $ts);
+                return date("Y-m-d", $ts);
             } catch (\Throwable) {
                 return null;
             }
         }
 
+        return null;
+    }
+
+    /**
+     * @return array<string,string>
+     */
+    private function mapaMeses(): array
+    {
+        return [
+            "janeiro" => "01", "enero" => "01", "january" => "01", "jan" => "01",
+            "fevereiro" => "02", "febrero" => "02", "february" => "02", "fev" => "02", "feb" => "02",
+            "marco" => "03", "marzo" => "03", "march" => "03", "mar" => "03",
+            "abril" => "04", "april" => "04", "abr" => "04", "apr" => "04",
+            "maio" => "05", "mayo" => "05", "may" => "05", "mai" => "05",
+            "junho" => "06", "junio" => "06", "june" => "06", "jun" => "06",
+            "julho" => "07", "julio" => "07", "july" => "07", "jul" => "07",
+            "agosto" => "08", "august" => "08", "ago" => "08", "aug" => "08",
+            "setembro" => "09", "septiembre" => "09", "setiembre" => "09", "september" => "09", "set" => "09", "sep" => "09",
+            "outubro" => "10", "octubre" => "10", "october" => "10", "out" => "10", "oct" => "10",
+            "novembro" => "11", "noviembre" => "11", "november" => "11", "nov" => "11",
+            "dezembro" => "12", "diciembre" => "12", "december" => "12", "dez" => "12", "dic" => "12", "dec" => "12",
+        ];
+    }
+
+    /**
+     * @param array<string,string> $meses
+     */
+    private function numeroMes(string $nome, array $meses): ?string
+    {
+        $n = $this->normalizar($nome);
+        if (isset($meses[$n])) {
+            return $meses[$n];
+        }
+        foreach ($meses as $chave => $num) {
+            if (str_starts_with($n, $chave) || str_starts_with($chave, $n)) {
+                return $num;
+            }
+        }
         return null;
     }
 
@@ -797,9 +846,10 @@ class PlanilhaImportacaoService
             $raw = $m[1];
             $negativo = true;
         }
-        if (str_starts_with($raw, "-")) {
+        $raw = ltrim($raw, "−–—");
+        if (str_starts_with($raw, "-") || str_starts_with(trim((string) $raw), "−")) {
             $negativo = true;
-            $raw = substr($raw, 1);
+            $raw = ltrim($raw, "-−–— ");
         }
 
         $raw = str_replace(["R$", " ", "\xc2\xa0"], "", $raw);
