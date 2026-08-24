@@ -638,17 +638,17 @@ class PlanilhaImportacaoService
             $indicePorDestino = array_flip($mapa);
 
             if ($layout === self::LAYOUT_LEDGER) {
-                [$inseridos, $ignorados, $naoAcharam] = $this->processarLedger(
+                [$inseridos, $ignorados, $naoAcharam, $linhasOrigem] = $this->processarLedger(
                     $sheet, $mapa, $indicePorDestino, $headers, $highestRow, $highestCol,
                     $idProjeto, $tipo, $aba, $idUsuario, $idContaPadrao, $primeiraLinha
                 );
             } elseif ($layout === self::LAYOUT_MATRIZ) {
-                [$inseridos, $ignorados, $naoAcharam] = $this->processarMatriz(
+                [$inseridos, $ignorados, $naoAcharam, $linhasOrigem] = $this->processarMatriz(
                     $sheet, $mapa, $indicePorDestino, $headers, $highestRow, $highestCol,
                     $idProjeto, $tipo, $aba, $idUsuario, $primeiraLinha
                 );
             } else {
-                [$inseridos, $ignorados, $naoAcharam] = $this->processarColunar(
+                [$inseridos, $ignorados, $naoAcharam, $linhasOrigem] = $this->processarColunar(
                     $sheet, $mapa, $indicePorDestino, $headers, $highestRow, $highestCol,
                     $idProjeto, $tipo, $aba, $idUsuario, $primeiraLinha
                 );
@@ -668,6 +668,7 @@ class PlanilhaImportacaoService
 
             return [
                 "inseridos"           => $inseridos,
+                "linhas_origem"       => $linhasOrigem,
                 "ignorados"           => $ignorados,
                 "avisos"              => $avisos,
                 "amostras"            => $this->amostras,
@@ -986,7 +987,7 @@ class PlanilhaImportacaoService
             $inseridos++;
         }
 
-        return [$inseridos, $ignorados, $naoAcharam];
+        return [$inseridos, $ignorados, $naoAcharam, $inseridos];
     }
 
     /**
@@ -1019,6 +1020,7 @@ class PlanilhaImportacaoService
         $inseridos  = 0;
         $ignorados  = 0;
         $naoAcharam = [];
+        $linhasOrigem = 0;
 
         for ($r = $primeiraLinha; $r <= $highestRow; $r++) {
             $linha = $this->linha($sheet, $r, $highestCol);
@@ -1067,10 +1069,12 @@ class PlanilhaImportacaoService
             }
             if (!$criou) {
                 $ignorados++;
+            } else {
+                $linhasOrigem++;
             }
         }
 
-        return [$inseridos, $ignorados, $naoAcharam];
+        return [$inseridos, $ignorados, $naoAcharam, $linhasOrigem];
     }
 
     /**
@@ -1099,6 +1103,7 @@ class PlanilhaImportacaoService
         $inseridos  = 0;
         $ignorados  = 0;
         $naoAcharam = [];
+        $linhasOrigem = 0;
 
         for ($r = $primeiraLinha; $r <= $highestRow; $r++) {
             $linha = $this->linha($sheet, $r, $highestCol);
@@ -1153,10 +1158,12 @@ class PlanilhaImportacaoService
 
             if (!$criou) {
                 $ignorados++;
+            } else {
+                $linhasOrigem++;
             }
         }
 
-        return [$inseridos, $ignorados, $naoAcharam];
+        return [$inseridos, $ignorados, $naoAcharam, $linhasOrigem];
     }
 
     private function celulaDaLinha(array $linha, ?int $indiceZero): string

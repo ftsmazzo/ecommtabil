@@ -580,9 +580,10 @@ $renderSelect = function (string $destino, bool $obrigatorio = false) use ($colu
                     document.getElementById("simular-erro").classList.remove("d-none");
                     return;
                 }
+                var orig = data.linhas_origem || data.inseridos;
                 document.getElementById("simular-resumo").textContent =
-                    data.inseridos + " lançamento(s) seriam gerados · " +
-                    data.ignorados + " linha(s) ignorada(s) · " +
+                    orig + " linha(s) da planilha → " + data.inseridos + " lançamento(s) (uma coluna de valor = um lançamento) · " +
+                    data.ignorados + " linha(s) sem valor mapeado · " +
                     (data.contas_nao_achadas ? data.contas_nao_achadas.length : 0) + " conta(s) sem match.";
 
                 var avisos = document.getElementById("simular-avisos");

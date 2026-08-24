@@ -717,7 +717,8 @@ class ProjetoController extends ControllerAdmin
             if ($resultado["inseridos"] === 0) {
                 $this->message->warning("Nenhum lançamento foi gerado. Revise o mapeamento, os nomes das contas e o formato dos valores.");
             } else {
-                $msg = $resultado["inseridos"] . " lançamento(s) importado(s)";
+                $msg = $resultado["inseridos"] . " lançamento(s) a partir de "
+                    . (int) ($resultado["linhas_origem"] ?? $resultado["inseridos"]) . " linha(s) da planilha";
                 if ($resultado["ignorados"] > 0) {
                     $msg .= " · " . $resultado["ignorados"] . " linha(s) ignorada(s)";
                 }
