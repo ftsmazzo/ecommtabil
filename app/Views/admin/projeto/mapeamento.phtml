@@ -48,6 +48,17 @@ $rotuloDestino = static function (string $dest) use ($nomeContaPorId): string {
 
 $colunasUsadas = array_map("intval", array_values($campos));
 
+$mapperUi = new \App\Services\Importacao\DeParaMapper();
+$colunasMatrizCandidatas = [];
+foreach ($colunas as $i => $col) {
+    $n = $mapperUi->normalizar((string) ($col["header"] ?? ""));
+    if ($mapperUi->pareceCabecalhoPeriodo($n) || in_array((int) $i, $periodosMarcados, true)) {
+        $colunasMatrizCandidatas[(int) $i] = $col;
+    }
+}
+$layoutAtual = (string) ($layoutDetectado ?? $layout ?? "");
+$mostrarMatriz = $layoutAtual === "matriz" || $colunasMatrizCandidatas !== [] || $periodosMarcados !== [];
+
 $renderSelect = function (string $destino, bool $obrigatorio = false) use ($colunas, $campos): void {
     $atual = array_key_exists($destino, $campos) ? (string) (int) $campos[$destino] : "";
     $req   = $obrigatorio ? " data-obrigatorio=\"1\"" : "";
@@ -253,7 +264,7 @@ $renderSelect = function (string $destino, bool $obrigatorio = false) use ($colu
                                 <?php if ($destinos) : ?>
                                     <span class="text-success small"><?=htmlspecialchars(implode(", ", $destinos), ENT_QUOTES, "UTF-8")?></span>
                                 <?php else : ?>
-                                    <span class="text-muted small">sem mapeamento (ok se não for valor/data)</span>
+                                    <span class="text-muted small">sem mapeamento — normal (nº venda, estado, depósito…)</span>
                                 <?php endif ?>
                             </td>
                         </tr>
@@ -269,8 +280,14 @@ $renderSelect = function (string $destino, bool $obrigatorio = false) use ($colu
             <span class="text-muted fw-normal small ms-1">(se cada conta já vem em uma coluna)</span>
         </summary>
         <div class="card-body border-bottom py-2">
+            <p class="campo-hint mb-2">
+                Use isto no arquivo do Mercado Livre / Shopee: a planilha já tem colunas tipo
+                <strong>Receita por produto</strong>, <strong>Custo</strong>, <strong>Tarifa</strong>.
+                Em cada linha abaixo, escolha <em>qual coluna do Excel</em> alimenta aquela conta.
+                Não escolha Nº de venda, Estado, Depósito — isso não é conta.
+            </p>
             <input type="search" id="filtro-contas" class="form-control form-control-sm" style="max-width:280px"
-                   placeholder="Filtrar conta..." autocomplete="off">
+                   placeholder="Filtrar conta (ex.: receita, cmv, tarifa)..." autocomplete="off">
         </div>
         <div class="table-responsive">
             <table class="table table-sm mb-0 align-middle">
@@ -308,29 +325,40 @@ $renderSelect = function (string $destino, bool $obrigatorio = false) use ($colu
         </div>
     </details>
 
-    <details class="card mb-3"<?=$periodosMarcados ? " open" : ""?>>
+    <details class="card mb-3"<?=$mostrarMatriz && $periodosMarcados ? " open" : ""?>>
         <summary class="card-header fw-semibold" style="cursor:pointer">
-            Períodos nas colunas (matriz)
-            <span class="text-muted fw-normal small ms-1">(Ano 1, Ano 2, 2024, 2025…)</span>
+            Avançado: períodos nas colunas (matriz)
+            <span class="text-muted fw-normal small ms-1">— ignore no Mercado Livre / Shopee</span>
         </summary>
         <div class="card-body border-bottom">
-            <div class="campo-hint mb-2">A coluna com o nome da conta é o campo “Conta (texto na planilha)” acima. Marque aqui só as colunas de ano/mês.</div>
+            <p class="campo-hint mb-2">
+                Só use se o Excel for tipo SAGA: uma coluna “Conta” e outras colunas <strong>Ano 1, 2024, jan/25</strong>.
+                Venda do marketplace tem <strong>uma data por linha</strong> — não marque nada aqui.
+            </p>
+            <?php if (!$mostrarMatriz) : ?>
+                <div class="alert alert-light border py-2 mb-0 small">
+                    Neste arquivo não apareceu coluna de ano/mês. Não há o que escolher. A data vai no campo
+                    <strong>Data / competência</strong> (coluna “Data da venda”).
+                </div>
+            <?php else : ?>
             <div style="max-width:220px">
                 <label class="campo-label mb-1 d-block">Ano do primeiro período sem data</label>
                 <input type="number" name="ano_base" class="form-control form-control-sm" min="1990" max="2100" value="<?=(int) $anoBase?>">
                 <div class="campo-hint mt-1">Para cabeçalhos tipo “Ano 1”. Colunas já com 2024 continuam 2024.</div>
             </div>
+            <?php endif ?>
         </div>
+        <?php if ($mostrarMatriz) : ?>
         <div class="table-responsive">
             <table class="table table-sm mb-0 align-middle">
                 <thead class="table-light">
                     <tr>
                         <th style="width:48px" class="text-center">Usar</th>
-                        <th>Coluna de período / valor</th>
+                        <th>Coluna de ano / mês</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($colunas as $i => $col) : ?>
+                    <?php foreach ($colunasMatrizCandidatas as $i => $col) : ?>
                     <tr>
                         <td class="text-center">
                             <input type="checkbox" class="form-check-input js-matriz" name="periodos_matriz[]" value="<?=(int) $i?>"
@@ -341,6 +369,8 @@ $renderSelect = function (string $destino, bool $obrigatorio = false) use ($colu
                             <?=htmlspecialchars((string) $col["header"], ENT_QUOTES, "UTF-8")?>
                             <?php if (!empty($col["preview"])) : ?>
                                 <div class="campo-hint"><?=htmlspecialchars((string) $col["preview"], ENT_QUOTES, "UTF-8")?></div>
+                            <?php else : ?>
+                                <div class="campo-hint">Sem exemplo nas primeiras linhas (célula vazia no arquivo, não é erro do sistema)</div>
                             <?php endif ?>
                         </td>
                     </tr>
@@ -348,6 +378,9 @@ $renderSelect = function (string $destino, bool $obrigatorio = false) use ($colu
                 </tbody>
             </table>
         </div>
+        <?php else : ?>
+            <input type="hidden" name="ano_base" value="<?=(int) $anoBase?>">
+        <?php endif ?>
     </details>
 </form>
 
