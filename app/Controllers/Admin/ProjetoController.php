@@ -880,17 +880,20 @@ class ProjetoController extends ControllerAdmin
             $camposSistema[] = "conta_{$conta->id} → {$conta->codigo} — {$conta->nome}";
         }
 
+        $dicionario = $mapper->dicaPromptIa();
         $systemPrompt = <<<PROMPT
-Você mapeia planilhas financeiras para o plano de contas. Responda SOMENTE JSON, sem markdown.
+Você mapeia planilhas de marketplace (Mercado Livre / Shopee) para o modelo SAGA/DRE.
+Responda SOMENTE JSON, sem markdown.
 Formato: {"campos": {"__periodo__": 0, "conta_12": 3}, "periodos_matriz": []}
 
-Regras obrigatórias:
-1. NÃO altere campos ou colunas marcados como "já mapeado". Só preencha o que falta.
-2. Cada coluna de DINHEIRO (receita, custo, tarifa, frete, cupom, comissão) deve ir para conta_N, nunca para __valor__ nem para __descricao__.
-3. __descricao__ só para título/anúncio/produto (texto). "Receita por produto" NÃO é descrição.
-4. Não use __valor__ se houver duas ou mais colunas de dinheiro.
-5. Não atribua a mesma coluna a dois campos.
-6. Se não tiver certeza, omita o campo.
+{$dicionario}
+
+Regras:
+1. NÃO altere o que está "já mapeado". Só preencha lacunas.
+2. Coluna de DINHEIRO → conta_N (nunca __descricao__ nem Total).
+3. __descricao__ só título/produto (texto).
+4. Não atribua a mesma coluna a dois campos.
+5. Folha, Aluguel, Depreciação: omita se não houver coluna clara.
 PROMPT;
 
         $prompt  = "Tipo: " . strtoupper((string) $upload->tipo) . "\n";

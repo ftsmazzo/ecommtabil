@@ -377,6 +377,13 @@ class PlanilhaImportacaoService
             }
             $label = trim((string) ($col->descricao ?? $destino));
             $hint  = trim((string) ($col->helper ?? ""));
+            $labelNorm = mb_strtolower($label, "UTF-8");
+            if (in_array($labelNorm, ["campo padrão", "campo padrao", "padrão", "padrao", "campo"], true)) {
+                if (str_starts_with($destino, "conta_")) {
+                    continue;
+                }
+                $label = "";
+            }
             $campos[] = [
                 "destino" => $destino,
                 "label"   => $label !== "" ? $label : $destino,
@@ -436,6 +443,11 @@ class PlanilhaImportacaoService
                 "grupo"   => "modelo",
                 "busca"   => "unidade marketplace",
             ];
+        }
+
+        $mapper = new DeParaMapper();
+        foreach ($campos as $i => $campo) {
+            $campos[$i] = $mapper->enriquecerCampo($campo);
         }
 
         return [
