@@ -1126,6 +1126,12 @@ class PlanilhaImportacaoService
                     continue;
                 }
 
+                $contaObj = DreConta::find($idConta);
+                $rotulo   = $contaObj
+                    ? trim((string) ($contaObj->codigo ?? "") . " — " . (string) ($contaObj->nome ?? ""))
+                    : "conta_" . $idConta;
+                $origem = (string) ($headers[(int) $colIdx] ?? "");
+
                 $this->gravarLancamento(
                     $idProjeto,
                     $tipo,
@@ -1138,7 +1144,8 @@ class PlanilhaImportacaoService
                     $r,
                     (string) $destino,
                     $idUsuario,
-                    "conta_" . $idConta
+                    $rotulo,
+                    $origem
                 );
                 $inseridos++;
                 $criou = true;
@@ -1247,11 +1254,13 @@ class PlanilhaImportacaoService
         int $linha,
         string $mapeamento,
         int $idUsuario,
-        string $rotuloConta = ""
+        string $rotuloConta = "",
+        string $origemColuna = ""
     ): void {
         if (count($this->amostras) < 25) {
             $this->amostras[] = [
                 "linha"   => $linha,
+                "origem"  => $origemColuna,
                 "conta"   => $rotuloConta !== "" ? $rotuloConta : $mapeamento,
                 "periodo" => $periodo,
                 "valor"   => $valor,

@@ -349,13 +349,18 @@ $renderSelect = function (string $destino, bool $obrigatorio = false) use ($colu
                 <div id="simular-ok" class="d-none">
                     <p class="mb-2" id="simular-resumo"></p>
                     <div id="simular-avisos"></div>
+                    <p class="small text-muted mb-3" id="simular-explica">
+                        Uma linha da planilha (uma venda) vira <strong>vários lançamentos</strong>: um para cada coluna de valor que você mapeou (receita, custo, tarifa…).
+                        O número da esquerda é a linha do Excel, por isso se repete. Valor negativo veio do arquivo — no Mercado Livre tarifa, frete e estorno costumam vir com menos.
+                    </p>
                     <div class="table-responsive">
                         <table class="table table-sm mb-0">
                             <thead class="table-light">
                                 <tr>
-                                    <th>Linha</th>
-                                    <th>Conta</th>
-                                    <th>Período</th>
+                                    <th>Linha do Excel</th>
+                                    <th>Coluna da planilha</th>
+                                    <th>Conta no plano</th>
+                                    <th>Data</th>
                                     <th class="text-end">Valor</th>
                                 </tr>
                             </thead>
@@ -593,11 +598,17 @@ $renderSelect = function (string $destino, bool $obrigatorio = false) use ($colu
                 tb.innerHTML = "";
                 (data.amostras || []).forEach(function (a) {
                     var tr = document.createElement("tr");
-                    var valor = Number(a.valor || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                    tr.innerHTML = "<td>" + a.linha + "</td><td></td><td></td><td class=\"text-end\"></td>";
-                    tr.cells[1].textContent = a.conta || "";
-                    tr.cells[2].textContent = a.periodo || "—";
-                    tr.cells[3].textContent = valor;
+                    var valorNum = Number(a.valor || 0);
+                    var valor = valorNum.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    if (valorNum < 0) {
+                        tr.classList.add("text-danger");
+                    }
+                    tr.innerHTML = "<td></td><td></td><td></td><td></td><td class=\"text-end\"></td>";
+                    tr.cells[0].textContent = a.linha;
+                    tr.cells[1].textContent = a.origem || "—";
+                    tr.cells[2].textContent = a.conta || "";
+                    tr.cells[3].textContent = a.periodo || "—";
+                    tr.cells[4].textContent = valor;
                     tb.appendChild(tr);
                 });
                 document.getElementById("simular-ok").classList.remove("d-none");
