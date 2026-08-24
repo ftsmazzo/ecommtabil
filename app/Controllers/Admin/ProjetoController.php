@@ -820,6 +820,7 @@ class ProjetoController extends ControllerAdmin
             $layout = $svc->detectarLayout($headers);
         }
 
+        DreConta::garantirPlanoSagaPadrao((string) $upload->tipo, (int) ($this->user->uid ?? 0));
         $contas = DreConta::analiticasLista($upload->tipo);
         $mapper = new DeParaMapper();
 
@@ -836,6 +837,20 @@ class ProjetoController extends ControllerAdmin
 
         $motor = $mapper->sugerir($headers, $layout, $contas);
         $base  = $mapper->mesclarCampos($atualCampos, $motor["campos"]);
+        $periodosMotor = $mapper->mesclarPeriodos($atualPeriodos, $motor["periodos_matriz"], $base);
+
+        $usarIa = (int) ($data->usar_ia ?? 0) === 1;
+        if (!$usarIa) {
+            echo json_encode([
+                "ok"              => true,
+                "layout"          => $layout,
+                "campos"          => $base,
+                "periodos_matriz" => $periodosMotor,
+                "somente_lacunas" => true,
+                "aviso"           => "Completado pelo motor de cabeçalhos, sem IA.",
+            ], JSON_UNESCAPED_UNICODE);
+            return;
+        }
 
         $linhasColunas = [];
         foreach ($headers as $i => $h) {

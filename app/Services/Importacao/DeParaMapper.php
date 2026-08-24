@@ -163,15 +163,14 @@ class DeParaMapper
      */
     public function casarConta(string $header, array $contas): ?object
     {
-        $direto = DreConta::casarEmLista($contas, $header);
-        if ($direto) {
-            return $direto;
-        }
         $canonico = $this->aliasParaConta($this->normalizar($header));
         if ($canonico !== null) {
-            return DreConta::casarEmLista($contas, $canonico);
+            $porAlias = DreConta::casarEmLista($contas, $canonico);
+            if ($porAlias) {
+                return $porAlias;
+            }
         }
-        return null;
+        return DreConta::casarEmLista($contas, $header);
     }
 
     public function aliasParaConta(string $n): ?string
@@ -193,6 +192,7 @@ class DeParaMapper
             "custo"                     => "CMV",
             "custos"                    => "CMV",
             "cmv"                       => "CMV",
+            "tarifadeventa"             => "Tarifa de venda e impostos",
             "tarifadevendaeimpostos"    => "Tarifa de venda e impostos",
             "tarifadevenda"             => "Tarifa de venda e impostos",
             "tarifasdeventa"            => "Tarifa de venda e impostos",
