@@ -72,11 +72,9 @@
                         <div class="text-muted small">
                             <?=number_format((int) $r->total_lancamentos, 0, ",", ".")?> lançamentos
                         </div>
-                        <?php if ((float) $r->valor_total > 0) : ?>
-                            <div class="fw-semibold mt-1">
-                                R$ <?=number_format((float) $r->valor_total, 2, ",", ".")?>
-                            </div>
-                        <?php endif ?>
+                        <div class="fw-semibold mt-1">
+                            R$ <?=number_format((float) $r->valor_total, 2, ",", ".")?>
+                        </div>
                     </div>
                 </div>
             </div>

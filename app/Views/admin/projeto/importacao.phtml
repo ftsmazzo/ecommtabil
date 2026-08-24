@@ -81,8 +81,10 @@
     <p class="small text-muted mb-0">
         Esses 3 botões são o <strong>destino</strong> dos dados — o demonstrativo que o sistema vai montar.
         As planilhas que o cliente manda (Shopee, Mercado Livre, despesas, estatística…) são a <strong>origem</strong>.
-        Vendas de marketplace entram no <strong>DRE</strong>. Depois o de-para diz: Valor = coluna Total, Data = coluna Data.
-        Uma planilha alimenta um demonstrativo, não os três de uma vez.
+        Arquivos do Mercado Livre ou Shopee são só exemplos — o cliente pode mandar outro layout.
+        O sistema mapeia o que reconhecer (data, marketplace, receita, custo, tarifas…) e você indica só o que faltar.
+        Os valores entram nas contas do plano, do jeito que o demonstrativo foi pensado.
+        Vendas de marketplace entram no <strong>DRE</strong>. Uma planilha alimenta um demonstrativo, não os três de uma vez.
     </p>
 </div>
 
@@ -129,7 +131,7 @@
             </div>
             <h5 class="fw-semibold mb-1">Enviar planilha própria (de-para)</h5>
             <p class="text-muted mb-4">
-                Shopee, Mercado Livre, Bling, qualquer Excel. O sistema lê as colunas e você indica, no de-para, qual coluna é Data, Descrição, Valor etc.
+                Qualquer Excel do cliente. O sistema lê as colunas e sugere o de-para; você confirma ou completa o mínimo.
             </p>
             <form action="<?=$router->route("admin.projeto.importacao.upload", ["id" => $projeto->id])?>" method="POST" enctype="multipart/form-data" id="form-import-livre">
                 <input type="hidden" name="csrf" value="<?=$csrf?>">

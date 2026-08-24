@@ -10,6 +10,10 @@ use App\Enums\CartaoStatusEnum;
 use App\Enums\MovimentacaoTipoEnum;
 use App\Models\Cartao;
 use App\Models\Configuracao;
+use App\Models\Empresa;
+use App\Models\Projeto;
+use App\Models\ProjetoLancamento;
+use App\Models\UsuarioProjetoRecente;
 use App\Services\CartaoService;
 
 class HomeController extends ControllerAdmin
@@ -29,41 +33,47 @@ class HomeController extends ControllerAdmin
 
     public function index(Request $request): void
     {
-        $periodo = $this->sanitizePeriodo((string) $request->input('periodo', 'week'));
-        $range   = $this->resolvePeriodoRange($periodo);
-
-        $params = [
-            "vapidKey" => Config::get("push.publicKey"),
-            "userToken" => $this->user->token,
-            "csrf" => $this->csrf->generate(),
-            "periodoAtual" => $periodo,
-            "periodoLabel" => $range->label,
-            "periodoOptions" => $this->getPeriodoOptions(),
-            "dashboard" => [
-                "cartoes_total" => $this->getCartoesTotal(),
-                "cartoes_periodo" => $this->getCartoesPeriodo($range->inicio, $range->fim),
-                "recarga" => $this->getResumoTipos(
-                    [MovimentacaoTipoEnum::RECARGA->value, MovimentacaoTipoEnum::CARGA_INICIAL->value],
-                    $range->inicio,
-                    $range->fim
-                ),
-                "cashback" => $this->getResumoTipos(
-                    [MovimentacaoTipoEnum::CASHBACK->value],
-                    $range->inicio,
-                    $range->fim
-                ),
-                "fidelidade" => $this->getResumoTipos(
-                    [MovimentacaoTipoEnum::FIDELIDADE->value],
-                    $range->inicio,
-                    $range->fim
-                ),
-                "grafico" => $periodo === 'year'
-                    ? $this->getGraficoMensal($range->inicio, $range->fim)
-                    : $this->getGraficoDiario($range->inicio, $range->fim),
+        $this->view->addData([
+            "breadcrumb" => [
+                "Painel" => ["url" => false, "current" => true],
             ],
-        ];
+            "page" => [
+                "title" => "Painel",
+                "desc"  => "Projetos e dados já importados no DRE, DFC e BP",
+            ],
+        ]);
 
-        echo $this->view->render("admin/home/index", $params);
+        $totais = ProjetoLancamento::totaisGerais();
+        $qtdEmpresas = count(Empresa::get());
+        $qtdProjetos = count(Projeto::get());
+
+        $projetos = Projeto::leftJoin("empresa as e", "p.id_empresa", "=", "e.id")
+            ->select("p.*", "e.razao as empresa_razao", "e.nome as empresa_nome")
+            ->orderBy("p.nome")
+            ->get();
+
+        foreach ($projetos as $projeto) {
+            $projeto->empresa_print = trim((string) ($projeto->empresa_razao ?: $projeto->empresa_nome)) ?: "-";
+            $projeto->abrir_url     = $this->router->route("admin.projeto.abrir", ["id" => $projeto->id]);
+            $projeto->resumo        = ProjetoLancamento::resumoPorProjeto((int) $projeto->id);
+        }
+
+        $recentes = UsuarioProjetoRecente::recentesPorUsuario((int) ($this->user->uid ?? 0), 6);
+        foreach ($recentes as &$rec) {
+            $rec["url"] = $this->router->route("admin.projeto.abrir", ["id" => $rec["id"]]);
+        }
+        unset($rec);
+
+        echo $this->view->render("admin/home/index", [
+            "vapidKey"    => Config::get("push.publicKey"),
+            "userToken"   => $this->user->token,
+            "csrf"        => $this->csrf->generate(),
+            "totais"      => $totais,
+            "qtdEmpresas" => (int) $qtdEmpresas,
+            "qtdProjetos" => (int) $qtdProjetos,
+            "projetos"    => $projetos,
+            "recentes"    => $recentes,
+        ]);
     }
 
     public function atalhoRecarga(Request $request): void

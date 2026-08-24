@@ -176,7 +176,7 @@ $renderSelect = function (string $destino, bool $obrigatorio = false) use ($colu
                     <tr>
                         <td>
                             <div class="campo-label">Lançar o valor nesta conta</div>
-                            <div class="campo-hint">Use quando a planilha não traz o nome da conta em cada linha (Shopee, Mercado Livre, etc.)</div>
+                            <div class="campo-hint">Só precisa se a planilha tiver um único valor e nenhuma coluna por conta. Com várias colunas de valor, o sistema já tenta ligar cada uma a uma conta.</div>
                         </td>
                         <td>
                             <select name="conta_padrao" class="form-select form-select-sm map-select">

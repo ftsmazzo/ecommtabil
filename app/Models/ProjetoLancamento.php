@@ -35,7 +35,7 @@ class ProjetoLancamento extends Model
                 COUNT(DISTINCT id_dre_conta) AS total_contas,
                 COALESCE(SUM(valor), 0) AS valor_total
             FROM projeto_lancamento
-            WHERE id_projeto = ? AND trash = 0" . ($tipo ? " AND tipo_demonstrativo = ?" : ""),
+            WHERE id_projeto = ? AND trash = 0" . ($tipo ? " AND LOWER(tipo_demonstrativo) = LOWER(?)" : ""),
             $tipo ? [$idProjeto, $tipo] : [$idProjeto]
         );
         $row = $result[0] ?? [];
@@ -43,6 +43,24 @@ class ProjetoLancamento extends Model
             "total_lancamentos" => (int) ($row->total_lancamentos ?? $row["total_lancamentos"] ?? 0),
             "total_periodos"    => (int) ($row->total_periodos ?? $row["total_periodos"] ?? 0),
             "total_contas"      => (int) ($row->total_contas ?? $row["total_contas"] ?? 0),
+            "valor_total"       => (float) ($row->valor_total ?? $row["valor_total"] ?? 0),
+        ];
+    }
+
+    public static function totaisGerais(): object
+    {
+        $result = \App\Core\DB::execute(
+            "SELECT
+                COUNT(*) AS total_lancamentos,
+                COUNT(DISTINCT id_projeto) AS projetos_com_dado,
+                COALESCE(SUM(valor), 0) AS valor_total
+             FROM projeto_lancamento
+             WHERE trash = 0"
+        );
+        $row = $result[0] ?? [];
+        return (object) [
+            "total_lancamentos" => (int) ($row->total_lancamentos ?? $row["total_lancamentos"] ?? 0),
+            "projetos_com_dado" => (int) ($row->projetos_com_dado ?? $row["projetos_com_dado"] ?? 0),
             "valor_total"       => (float) ($row->valor_total ?? $row["valor_total"] ?? 0),
         ];
     }

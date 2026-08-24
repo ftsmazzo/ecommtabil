@@ -234,6 +234,95 @@ class DreConta extends Model
     }
 
     /**
+     * Garante as contas analíticas mínimas do SAGA (vendas ML/Shopee, despesas, DRE).
+     * Não apaga TESTE A nem contas já existentes — só cria o que faltar.
+     *
+     * @return int quantidade criada
+     */
+    public static function garantirPlanoSagaPadrao(string $tipo, int $idUsuario = 0): int
+    {
+        $tipo = self::resolverTipo($tipo);
+        $criadas = 0;
+
+        $catalogo = [
+            "dre" => [
+                ["Receita Bruta", "aumenta"],
+                ["Receita por envio", "aumenta"],
+                ["Deduções", "diminui"],
+                ["Tarifa de venda e impostos", "diminui"],
+                ["Cupons e Descontos", "diminui"],
+                ["CMV", "diminui"],
+                ["Despesas Operacionais", "diminui"],
+                ["Folha administrativa", "diminui"],
+                ["Aluguel", "diminui"],
+                ["Marketing", "diminui"],
+                ["Tarifas de Envio", "diminui"],
+                ["Comissão de Afiliados", "diminui"],
+                ["Frete Entrega Direta", "diminui"],
+                ["Depreciação", "diminui"],
+                ["Resultado Financeiro", "diminui"],
+            ],
+            "dfc" => [
+                ["Recebimentos de Clientes", "aumenta"],
+                ["Pagamentos a Fornecedores", "diminui"],
+            ],
+            "bp" => [
+                ["Caixa e Equivalentes", "aumenta"],
+                ["Contas a Receber", "aumenta"],
+                ["Estoques", "aumenta"],
+                ["Fornecedores", "diminui"],
+                ["Empréstimos CP", "diminui"],
+                ["Empréstimos LP", "diminui"],
+                ["Patrimônio Líquido", "aumenta"],
+            ],
+        ];
+
+        $chave = strtolower($tipo);
+        $lista = $catalogo[$chave] ?? $catalogo["dre"];
+
+        $existentes = DB::table("dre_conta")
+            ->where("tipo_demonstrativo", "=", $tipo)
+            ->where("trash", "=", 0)
+            ->get();
+
+        $norm = static function (string $t): string {
+            $t = mb_strtolower(trim($t), "UTF-8");
+            $ascii = @iconv("UTF-8", "ASCII//TRANSLIT//IGNORE", $t);
+            $t = is_string($ascii) ? $ascii : $t;
+            return (string) preg_replace("/[^a-z0-9]+/", "", $t);
+        };
+
+        $jaTem = [];
+        foreach ($existentes as $row) {
+            $jaTem[$norm((string) $row->nome)] = true;
+        }
+
+        foreach ($lista as $ordem => [$nome, $natureza]) {
+            if (isset($jaTem[$norm($nome)])) {
+                continue;
+            }
+            $codigo = self::gerarCodigo(null, $tipo);
+            self::create([
+                "tipo_demonstrativo" => $tipo,
+                "id_pai"             => null,
+                "nivel"              => 1,
+                "codigo"             => $codigo,
+                "nome"               => $nome,
+                "tipo"               => "analitica",
+                "natureza"           => $natureza,
+                "sinal"              => $natureza === "diminui" ? -1 : 1,
+                "ordem"              => 100 + $ordem,
+                "trash"              => 0,
+                "created_by"         => $idUsuario ?: null,
+            ]);
+            $jaTem[$norm($nome)] = true;
+            $criadas++;
+        }
+
+        return $criadas;
+    }
+
+    /**
      * Gera o código da conta a partir do pai, dentro de um tipo de demonstrativo.
      * Ex: pai com código "1.2" e 3 filhos existentes → "1.2.4"
      */

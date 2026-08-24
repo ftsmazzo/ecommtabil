@@ -411,6 +411,7 @@ class ProjetoController extends ControllerAdmin
             $colunas = $svc->rotulosColunas($headers, $previews);
             $linhaCabecalho = (int) ($lido["linhaCabecalho"] ?? 1);
 
+            DreConta::garantirPlanoSagaPadrao((string) $upload->tipo, (int) ($this->user->uid ?? 0));
             $contasGrupos = DreConta::analiticasPorTipo($upload->tipo);
             $contasLista  = DreConta::analiticasLista($upload->tipo);
             $dePara       = $svc->camposDePara((string) $upload->tipo, $contasGrupos);
@@ -443,6 +444,25 @@ class ProjetoController extends ControllerAdmin
 
             $campos         = $expandido["campos"];
             $periodosMatriz = $expandido["periodos_matriz"];
+            if ($origemMapeamento === "sugerido" && !$contaPadrao) {
+                $temValor  = isset($campos[PlanilhaImportacaoService::DEST_VALOR]);
+                $temConta  = isset($campos[PlanilhaImportacaoService::DEST_CONTA]);
+                $temContaN = false;
+                foreach (array_keys($campos) as $dest) {
+                    if (str_starts_with((string) $dest, "conta_")) {
+                        $temContaN = true;
+                        break;
+                    }
+                }
+                if ($temValor && !$temConta && !$temContaN) {
+                    foreach ($contasLista as $c) {
+                        if (strcasecmp(trim((string) $c->nome), "Receita Bruta") === 0) {
+                            $contaPadrao = (int) $c->id;
+                            break;
+                        }
+                    }
+                }
+            }
             $anoBase        = (int) ($expandido["ano_base"] ?? date("Y"));
             if ($anoBase < 1990 || $anoBase > 2100) {
                 $anoBase = (int) date("Y");
