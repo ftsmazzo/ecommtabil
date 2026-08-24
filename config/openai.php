@@ -5,5 +5,5 @@ $openaiKey = getenv("OPENAI_API_KEY")
 
 return [
     "openai_key" => $openaiKey,
-    "model"      => getenv("OPENAI_MODEL") ?: "gpt-5-mini",
+    "model"      => getenv("OPENAI_MODEL") ?: "gpt-4.1-mini",
 ];

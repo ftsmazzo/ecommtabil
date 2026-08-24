@@ -437,7 +437,7 @@ class ProjetoController extends ControllerAdmin
                     }
                 }
                 if (empty($expandido["campos"])) {
-                    $expandido        = $svc->sugerirCampos($headers, $layoutDetectado, $contasLista);
+                    $expandido        = $svc->sugerirCampos($headers, $layoutDetectado, $contasLista, $previews);
                     $origemMapeamento = ($expandido["campos"] || $expandido["periodos_matriz"]) ? "sugerido" : "vazio";
                 }
                 $layout = $layoutDetectado;
@@ -848,68 +848,68 @@ class ProjetoController extends ControllerAdmin
         }
         $atualPeriodos = array_map("intval", (array) ($data->periodos_atuais ?? []));
 
-        $motor = $mapper->sugerir($headers, $layout, $contas);
+        $previews = [];
+        $caminho  = PATH_ROOT . "/storage/tmp/planilhas/" . ($upload->arquivo ?? "");
+        if (is_file($caminho)) {
+            try {
+                $aberto   = $svc->abrir($caminho);
+                $aba      = (int) ($data->aba ?? 0);
+                $sheet    = $aberto["spreadsheet"]->getSheet($aba);
+                $lido     = $svc->lerCabecalhos($sheet, 3);
+                $headers  = $lido["headers"] ?: $headers;
+                $previews = $lido["previews"] ?? [];
+            } catch (\Throwable $e) {
+                $previews = [];
+            }
+        }
+
+        $motor = $mapper->sugerir($headers, $layout, $contas, $previews);
         $base  = $mapper->mesclarCampos($atualCampos, $motor["campos"]);
         $periodosMotor = $mapper->mesclarPeriodos($atualPeriodos, $motor["periodos_matriz"], $base);
-
-        $usadas = array_flip(array_map("intval", array_values($base)));
-        $lacunas = [];
-        foreach ($headers as $i => $h) {
-            $i = (int) $i;
-            if (isset($usadas[$i])) {
-                continue;
-            }
-            $n = $mapper->normalizar((string) $h);
-            if ($mapper->pareceIgnorar($n)) {
-                continue;
-            }
-            $candidato = $mapper->aliasPorFragmento($n)
-                || $mapper->aliasParaConta($n)
-                || $mapper->pareceDescricao($n)
-                || $mapper->notaPeriodo($n) > 0;
-            if ($candidato) {
-                $lacunas[] = "  [{$i}] " . $svc->letra($i) . " — " . trim((string) $h);
-            }
-        }
-
-        if ($lacunas === []) {
-            echo json_encode([
-                "ok"              => true,
-                "layout"          => $layout,
-                "campos"          => $base,
-                "periodos_matriz" => $periodosMotor,
-                "somente_lacunas" => true,
-                "aviso"           => "Motor ML/Shopee aplicado. Não havia coluna de valor ou data solta para a IA completar.",
-            ], JSON_UNESCAPED_UNICODE);
-            return;
-        }
 
         $idsValidos = [];
         foreach ($contas as $conta) {
             $idsValidos["conta_" . $conta->id] = true;
         }
 
-        $camposSistema = [
-            PlanilhaImportacaoService::DEST_PERIODO   . " → Data / competência",
-            PlanilhaImportacaoService::DEST_DESCRICAO . " → Título / nome do item (texto)",
-            PlanilhaImportacaoService::DEST_UNIDADE   . " → Marketplace / loja",
-        ];
+        $modeloLinhas = [];
+        $modeloLinhas[] = PlanilhaImportacaoService::DEST_PERIODO . " | Data da competência | células de DATA | "
+            . (isset($base[PlanilhaImportacaoService::DEST_PERIODO]) ? "já preenchido" : "VAZIO");
+        $modeloLinhas[] = PlanilhaImportacaoService::DEST_DESCRICAO . " | Descrição do produto/anúncio | TEXTO, não dinheiro | "
+            . (isset($base[PlanilhaImportacaoService::DEST_DESCRICAO]) ? "já preenchido" : "VAZIO");
+        $modeloLinhas[] = PlanilhaImportacaoService::DEST_UNIDADE . " | Marketplace/loja | texto opcional | "
+            . (isset($base[PlanilhaImportacaoService::DEST_UNIDADE]) ? "já preenchido" : "VAZIO");
         foreach ($contas as $conta) {
-            $ja = isset($base["conta_" . $conta->id]) ? " [já preenchido]" : "";
-            $camposSistema[] = "conta_{$conta->id} → {$conta->nome}{$ja}";
+            $dest = "conta_" . $conta->id;
+            $guia = $mapper->guiaPorNomeConta((string) $conta->nome);
+            $modeloLinhas[] = $dest . " | " . $conta->nome . " | dinheiro | " . ($guia["hint"] ?? "")
+                . " | " . (isset($base[$dest]) ? "já preenchido" : "VAZIO");
         }
 
-        $dicionario = $mapper->dicaPromptIa();
+        $colunasLinhas = [];
+        $usadas = array_flip(array_map("intval", array_values($base)));
+        foreach ($headers as $i => $h) {
+            $i = (int) $i;
+            $lock = isset($usadas[$i]) ? " [já usada pelo motor]" : "";
+            $ex = !empty($previews[$i]) ? implode(" | ", array_slice($previews[$i], 0, 3)) : "(sem amostra)";
+            $colunasLinhas[] = "[{$i}] " . $svc->letra($i) . " cabeçalho=\"" . trim((string) $h) . "\" amostras=" . $ex . $lock;
+        }
+
         $systemPrompt = <<<PROMPT
-Você completa LACUNAS de de-para Shopee/Mercado Livre → DRE SAGA.
-Responda SOMENTE JSON: {"campos": {"__periodo__": 0, "conta_12": 3}, "periodos_matriz": []}
-Só use os índices das colunas listadas em LACUNAS.
-{$dicionario}
+Você faz de-para. A BASE é o MODELO (o que o demonstrativo precisa). O arquivo pode ser qualquer planilha.
+Tarefa: para cada campo do modelo marcado VAZIO, escolha o índice da coluna cujas amostras e cabeçalho melhor representam AQUELE CONCEITO. O nome da coluna não precisa ser igual ao do modelo.
+Regras:
+- Responda SOMENTE JSON: {"campos": {"__periodo__": 0, "conta_12": 3}}
+- Um índice de coluna só pode ir para um campo.
+- Campos já preenchidos: não altere.
+- Ignore identificação (id, status, sku, cpf, quantidade) se as amostras não forem o conceito do campo.
+- Data: amostras com data. Dinheiro: amostras numéricas. Descrição: texto de produto, nunca valor.
+- Não omita um campo VAZIO se houver coluna óbvia (ex.: números + ideia de venda/produto → Receita Bruta; números + taxa/comissão → tarifa).
 PROMPT;
 
-        $prompt  = "Tipo: " . strtoupper((string) $upload->tipo) . "\n";
-        $prompt .= "LACUNAS (ainda sem mapeamento):\n" . implode("\n", $lacunas) . "\n\n";
-        $prompt .= "Campos:\n" . implode("\n", $camposSistema);
+        $prompt  = "Demonstrativo: " . strtoupper((string) $upload->tipo) . "\n\n";
+        $prompt .= "MODELO:\n" . implode("\n", $modeloLinhas) . "\n\n";
+        $prompt .= "COLUNAS DO ARQUIVO:\n" . implode("\n", $colunasLinhas);
 
         $especiais = [
             PlanilhaImportacaoService::DEST_PERIODO   => true,
@@ -922,7 +922,10 @@ PROMPT;
 
         try {
             $ai     = new ChatGPT();
-            $result = $ai->send($systemPrompt, $prompt, "", null, ["retries" => 0]);
+            $result = $ai->send($systemPrompt, $prompt, "", null, [
+                "retries" => 0,
+                "model"   => "gpt-4.1-mini",
+            ]);
 
             if (!$result["ok"]) {
                 echo json_encode([

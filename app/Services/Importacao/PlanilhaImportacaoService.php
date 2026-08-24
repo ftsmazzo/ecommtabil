@@ -315,11 +315,12 @@ class PlanilhaImportacaoService
      *
      * @param array<int,string> $headers
      * @param array<int,object> $contas
-     * @return array{campos: array<string,int>, periodos_matriz: array<int,int>}
+     * @param array<int,array<int,string>> $previews
+     * @return array{campos: array<string,int>, periodos_matriz: array}
      */
-    public function sugerirCampos(array $headers, string $layout, array $contas = []): array
+    public function sugerirCampos(array $headers, string $layout, array $contas = [], array $previews = []): array
     {
-        return (new DeParaMapper())->sugerir($headers, $layout, $contas);
+        return (new DeParaMapper())->sugerir($headers, $layout, $contas, $previews);
     }
 
     /**

@@ -13,22 +13,22 @@ class DeParaMapper
     /**
      * @param array<int,string> $headers
      * @param array<int,object> $contas
+     * @param array<int,array<int,string>> $previews
      * @return array{campos: array<string,int>, periodos_matriz: array<int,int>}
      */
-    public function sugerir(array $headers, string $layout, array $contas = []): array
+    public function sugerir(array $headers, string $layout, array $contas = [], array $previews = []): array
     {
         $campos   = [];
         $periodos = [];
         $norm     = array_map([$this, "normalizar"], $headers);
-        $usados   = [];
-
-        $melhorData = $this->melhorIndicePeriodo($norm);
-        if ($melhorData !== null) {
-            $campos[PlanilhaImportacaoService::DEST_PERIODO] = $melhorData;
-            $usados[$melhorData] = true;
-        }
 
         if ($layout === PlanilhaImportacaoService::LAYOUT_MATRIZ) {
+            $usados = [];
+            $melhorData = $this->melhorIndicePeriodo($norm);
+            if ($melhorData !== null) {
+                $campos[PlanilhaImportacaoService::DEST_PERIODO] = $melhorData;
+                $usados[$melhorData] = true;
+            }
             foreach ($norm as $i => $h) {
                 if (isset($usados[$i])) {
                     continue;
@@ -48,67 +48,239 @@ class DeParaMapper
             return ["campos" => $campos, "periodos_matriz" => $periodos];
         }
 
-        foreach ($norm as $i => $h) {
-            if (isset($usados[$i])) {
-                continue;
+        return [
+            "campos"          => $this->atribuirDoModelo($headers, $norm, $previews, $contas),
+            "periodos_matriz" => [],
+        ];
+    }
+
+    /**
+     * Para cada campo do MODELO, escolhe a coluna do arquivo com maior score
+     * (conceito + tipo das amostras). Não depende de template Shopee/ML.
+     *
+     * @param array<int,string> $headers
+     * @param array<int,string> $norm
+     * @param array<int,array<int,string>> $previews
+     * @param array<int,object> $contas
+     * @return array<string,int>
+     */
+    public function atribuirDoModelo(array $headers, array $norm, array $previews, array $contas): array
+    {
+        $alvos = [];
+        $alvos[] = [
+            "dest" => PlanilhaImportacaoService::DEST_PERIODO,
+            "tipo" => "data",
+            "quer" => ["data", "date", "fecha", "periodo", "competencia", "venda", "pedido"],
+            "nao"  => ["prazo", "envio", "conclusao", "status"],
+        ];
+        $alvos[] = [
+            "dest" => PlanilhaImportacaoService::DEST_DESCRICAO,
+            "tipo" => "texto",
+            "quer" => ["produto", "item", "titulo", "anuncio", "publicacion", "nome", "descri"],
+            "nao"  => ["receita", "valor", "preco", "taxa", "custo", "sku", "id"],
+        ];
+        $alvos[] = [
+            "dest" => PlanilhaImportacaoService::DEST_UNIDADE,
+            "tipo" => "texto",
+            "quer" => ["marketplace", "canal", "loja", "empresa", "unidade", "seller"],
+            "nao"  => ["id", "sku", "valor"],
+        ];
+
+        foreach ($contas as $conta) {
+            $conceito = $this->conceitoDaConta((string) $conta->nome);
+            if ($conceito === null) {
+                $conceito = [
+                    "tipo" => "dinheiro",
+                    "quer" => array_filter(explode(" ", $this->normalizar((string) $conta->nome))),
+                    "nao"  => [],
+                ];
             }
-            if (!isset($campos[PlanilhaImportacaoService::DEST_CONTA]) && $this->pareceConta($h)) {
-                $campos[PlanilhaImportacaoService::DEST_CONTA] = (int) $i;
-                $usados[$i] = true;
-            } elseif (!isset($campos[PlanilhaImportacaoService::DEST_UNIDADE]) && $this->pareceUnidade($h)) {
-                $campos[PlanilhaImportacaoService::DEST_UNIDADE] = (int) $i;
-                $usados[$i] = true;
-            }
+            $alvos[] = [
+                "dest" => "conta_" . (int) $conta->id,
+                "tipo" => $conceito["tipo"],
+                "quer" => $conceito["quer"],
+                "nao"  => $conceito["nao"],
+            ];
         }
 
-        foreach ($headers as $i => $h) {
-            if (isset($usados[$i])) {
-                continue;
-            }
-            if ($this->pareceIgnorar($this->normalizar((string) $h))) {
-                continue;
-            }
-            $conta = $this->casarConta((string) $h, $contas);
-            if ($conta) {
-                $chave = "conta_" . $conta->id;
-                if (!isset($campos[$chave])) {
-                    $campos[$chave] = (int) $i;
-                    $usados[$i] = true;
+        $pares = [];
+        foreach ($alvos as $alvo) {
+            foreach ($headers as $i => $h) {
+                $i = (int) $i;
+                $n = (string) ($norm[$i] ?? $this->normalizar((string) $h));
+                $amostras = array_values(array_filter(array_map("strval", (array) ($previews[$i] ?? []))));
+                $nota = $this->notaConceito($alvo, $n, $amostras);
+                if ($nota >= 18) {
+                    $pares[] = ["dest" => $alvo["dest"], "col" => $i, "nota" => $nota];
                 }
             }
         }
 
-        foreach ($norm as $i => $h) {
-            if (isset($usados[$i])) {
+        usort($pares, static fn ($a, $b) => $b["nota"] <=> $a["nota"]);
+        $campos = [];
+        $usadas = [];
+        foreach ($pares as $p) {
+            if (isset($campos[$p["dest"]]) || isset($usadas[$p["col"]])) {
                 continue;
             }
-            if (!isset($campos[PlanilhaImportacaoService::DEST_DESCRICAO]) && $this->pareceDescricao($h)) {
-                $campos[PlanilhaImportacaoService::DEST_DESCRICAO] = (int) $i;
-                $usados[$i] = true;
+            $campos[$p["dest"]] = $p["col"];
+            $usadas[$p["col"]] = true;
+        }
+        return $campos;
+    }
+
+    /**
+     * @return array{tipo:string,quer:array<int,string>,nao:array<int,string>}|null
+     */
+    public function conceitoDaConta(string $nome): ?array
+    {
+        $n = $this->normalizar($nome);
+        $conceitos = [
+            "receitabruta" => [
+                "tipo" => "dinheiro",
+                "quer" => ["receita", "ingreso", "faturamento", "valordoproduto", "totaldoproduto", "precoacordado", "subtotal", "vendas"],
+                "nao"  => ["taxa", "comiss", "tarifa", "frete", "envio", "cupom", "desconto", "custo", "costo", "reembolso"],
+            ],
+            "receitaporenvio" => [
+                "tipo" => "dinheiro",
+                "quer" => ["receitaporenvio", "ingresoporenvio", "fretecomprador", "enviopagopelocomprador"],
+                "nao"  => ["vendedor", "estimativa", "custo", "tarifa"],
+            ],
+            "cmv" => [
+                "tipo" => "dinheiro",
+                "quer" => ["cmv", "custo", "costo", "cost"],
+                "nao"  => ["envio", "frete", "tarifa", "taxa", "comiss"],
+            ],
+            "tarifadevendaeimpostos" => [
+                "tipo" => "dinheiro",
+                "quer" => ["tarifa", "comiss", "taxa", "cargo", "fee", "imposto"],
+                "nao"  => ["afiliad", "envio", "frete", "cupom"],
+            ],
+            "cuponsedescontos" => [
+                "tipo" => "dinheiro",
+                "quer" => ["cupom", "desconto", "descuento", "reembolso", "cancelamento"],
+                "nao"  => ["taxa", "comiss", "frete"],
+            ],
+            "tarifasdeenvio" => [
+                "tipo" => "dinheiro",
+                "quer" => ["tarifasdeenvio", "frete", "envio", "shipping"],
+                "nao"  => ["comprador", "receita", "ingreso", "produto"],
+            ],
+            "comissaodeafiliados" => [
+                "tipo" => "dinheiro",
+                "quer" => ["afiliad"],
+                "nao"  => [],
+            ],
+            "freteentregadireta" => [
+                "tipo" => "dinheiro",
+                "quer" => ["entregadireta", "direct"],
+                "nao"  => [],
+            ],
+            "deducoes" => [
+                "tipo" => "dinheiro",
+                "quer" => ["deduc"],
+                "nao"  => ["tarifa", "taxa"],
+            ],
+        ];
+        return $conceitos[$n] ?? null;
+    }
+
+    /**
+     * @param array{dest:string,tipo:string,quer:array,nao:array} $alvo
+     * @param array<int,string> $amostras
+     */
+    public function notaConceito(array $alvo, string $n, array $amostras): int
+    {
+        if ($n === "") {
+            return 0;
+        }
+        $nota = 0;
+        foreach ($alvo["quer"] as $tok) {
+            $tok = $this->normalizar((string) $tok);
+            if ($tok === "") {
+                continue;
+            }
+            if ($n === $tok || str_contains($n, $tok) || (strlen($tok) >= 6 && str_contains($tok, $n))) {
+                $nota += 12 + min(8, strlen($tok));
+            }
+        }
+        foreach ($alvo["nao"] as $tok) {
+            $tok = $this->normalizar((string) $tok);
+            if ($tok !== "" && str_contains($n, $tok)) {
+                $nota -= 28;
             }
         }
 
-        $temContaN = false;
-        foreach (array_keys($campos) as $dest) {
-            if (str_starts_with((string) $dest, "conta_")) {
-                $temContaN = true;
-                break;
-            }
+        $tipoAmostra = $this->tipoAmostras($amostras);
+        if ($alvo["tipo"] === "data") {
+            $nota += ($tipoAmostra === "data") ? 40 : ($tipoAmostra === "vazio" ? 0 : -25);
+            $nota += $this->notaPeriodo($n);
+        } elseif ($alvo["tipo"] === "dinheiro") {
+            $nota += ($tipoAmostra === "numero") ? 28 : ($tipoAmostra === "vazio" ? 0 : -20);
+        } elseif ($alvo["tipo"] === "texto") {
+            $nota += ($tipoAmostra === "texto") ? 18 : ($tipoAmostra === "numero" ? -15 : 0);
         }
 
-        if (!$temContaN) {
-            foreach ($norm as $i => $h) {
-                if (isset($usados[$i])) {
-                    continue;
-                }
-                if (!isset($campos[PlanilhaImportacaoService::DEST_VALOR]) && $this->pareceValor($h)) {
-                    $campos[PlanilhaImportacaoService::DEST_VALOR] = (int) $i;
-                    $usados[$i] = true;
-                }
-            }
-        }
+        return $nota;
+    }
 
-        return ["campos" => $campos, "periodos_matriz" => $periodos];
+    /**
+     * @param array<int,string> $amostras
+     */
+    public function tipoAmostras(array $amostras): string
+    {
+        $datas = 0;
+        $nums  = 0;
+        $textos = 0;
+        $n = 0;
+        foreach (array_slice($amostras, 0, 5) as $a) {
+            $a = trim((string) $a);
+            if ($a === "" || $a === "-") {
+                continue;
+            }
+            $n++;
+            if ($this->pareceAmostraData($a)) {
+                $datas++;
+                continue;
+            }
+            if ($this->pareceAmostraNumero($a)) {
+                $nums++;
+                continue;
+            }
+            $textos++;
+        }
+        if ($n === 0) {
+            return "vazio";
+        }
+        if ($datas >= $n / 2) {
+            return "data";
+        }
+        if ($nums >= $n / 2) {
+            return "numero";
+        }
+        return "texto";
+    }
+
+    public function pareceAmostraData(string $v): bool
+    {
+        if (preg_match('/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}/', $v)) {
+            return true;
+        }
+        if (preg_match('/^\d{4}-\d{2}-\d{2}/', $v)) {
+            return true;
+        }
+        if (preg_match('/^\d{1,2}\s+de\s+\S+/u', mb_strtolower($v))) {
+            return true;
+        }
+        return false;
+    }
+
+    public function pareceAmostraNumero(string $v): bool
+    {
+        $s = str_replace(["R$", " ", "\xc2\xa0"], "", $v);
+        $s = str_replace(".", "", $s);
+        $s = str_replace(",", ".", $s);
+        return is_numeric($s);
     }
 
     /**
@@ -543,29 +715,8 @@ class DeParaMapper
     public function dicaPromptIa(): string
     {
         return <<<TXT
-Dicionário do modelo SAGA (planilha de vendas marketplace):
-- Data da Venda → __periodo__
-- Produto / Título → __descricao__
-- Empresa / Marketplace → __unidade__
-- Receita por Produto / Ingresos por producto → Receita Bruta
-- Custo / Precio de cost → CMV
-- Tarifa de venda e impostos / Cargo por servicio de venta → Tarifa de venda e impostos
-- Receita por envio / Frete Comprador → Receita por envio
-- Tarifas de Envio / Frete Vendedor / Costo envío → Tarifas de Envio
-- Cupom / Cancelamentos e Reembolsos → Cupons e Descontos
-- Comissão Afiliado → Comissão de Afiliados
-- Frete Entrega Direta → Frete Entrega Direta
-Dicionário Shopee (exportação de pedidos BR):
-- Data de criação do pedido / Data de pagamento do pedido → __periodo__
-- Nome do item / Nome do produto → __descricao__
-- Valor total do produto / Preço acordado → Receita Bruta
-- Taxa de comissão / Taxa de serviço / Taxa de transação → Tarifa de venda e impostos
-- Taxa de comissão de afiliados → Comissão de Afiliados
-- Cupom da loja / Cupom Shopee / Desconto do vendedor / Desconto Shopee → Cupons e Descontos
-- Custo de envio pago pelo comprador → Receita por envio
-- Estimativa de frete / Reembolso de frete → Tarifas de Envio
-NÃO mapear: Nº do pedido, Status, SKU, Quantidade, CPF, cidade, estado, Total estimado do pedido.
-Folha, Aluguel, Marketing, Depreciação: só mapeie se existir coluna com esse sentido. Vazio é válido.
+O modelo precisa de: data da venda, texto do produto, dinheiro de receita, custo, tarifas, fretes, descontos.
+O arquivo pode ter qualquer nome de coluna. Use o sentido do cabeçalho e das amostras, não um template de marketplace.
 TXT;
     }
 
