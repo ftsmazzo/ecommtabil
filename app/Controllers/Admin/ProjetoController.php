@@ -15,6 +15,7 @@ use App\Models\Projeto;
 use App\Models\ProjetoLancamento;
 use App\Models\ProjetoMapeamentoColuna;
 use App\Models\UsuarioProjetoRecente;
+use App\Services\Importacao\DeParaMapper;
 use App\Services\Importacao\PlanilhaImportacaoService;
 use App\Services\MenuService;
 
@@ -820,53 +821,68 @@ class ProjetoController extends ControllerAdmin
         }
 
         $contas = DreConta::analiticasLista($upload->tipo);
+        $mapper = new DeParaMapper();
+
+        $atualCampos = [];
+        foreach ((array) ($data->campos_atuais ?? []) as $dest => $indice) {
+            $dest   = trim((string) $dest);
+            $indice = (int) $indice;
+            if ($dest === "" || $indice < 0) {
+                continue;
+            }
+            $atualCampos[$dest] = $indice;
+        }
+        $atualPeriodos = array_map("intval", (array) ($data->periodos_atuais ?? []));
+
+        $motor = $mapper->sugerir($headers, $layout, $contas);
+        $base  = $mapper->mesclarCampos($atualCampos, $motor["campos"]);
 
         $linhasColunas = [];
         foreach ($headers as $i => $h) {
             $letra = $svc->letra((int) $i);
-            $linhasColunas[] = "  [{$i}] {$letra} — " . trim((string) $h);
+            $lock  = "";
+            foreach ($base as $d => $idx) {
+                if ((int) $idx === (int) $i) {
+                    $lock = " [já mapeado: {$d} — não altere]";
+                    break;
+                }
+            }
+            $linhasColunas[] = "  [{$i}] {$letra} — " . trim((string) $h) . $lock;
         }
-
-        $dePara = $svc->camposDePara((string) $upload->tipo, DreConta::analiticasPorTipo($upload->tipo));
-        $camposSistema = [];
-        foreach ($dePara["campos"] as $campo) {
-            $camposSistema[] = $campo["destino"] . " → " . $campo["label"];
-        }
-        $camposSistema[] = "__periodo__ → Período / Data";
-        $camposSistema[] = "__descricao__ → Descrição";
-        $camposSistema[] = "__valor__ → Valor";
-        $camposSistema[] = "__unidade__ → Unidade / Centro de custo";
-        $camposSistema[] = "__conta__ → Nome ou código da conta (texto da célula)";
-        foreach ($contas as $conta) {
-            $camposSistema[] = "conta_{$conta->id} → {$conta->codigo} — {$conta->nome}";
-        }
-        $camposSistema[] = "periodos_matriz → índices das colunas que são anos/meses (matriz)";
-
-        $camposSistema = array_values(array_unique($camposSistema));
-
-        $systemPrompt = <<<PROMPT
-Você é um assistente especialista em contabilidade e finanças empresariais (DRE, DFC, Balanço).
-Sua tarefa é mapear CAMPOS DO SISTEMA para COLUNAS da planilha (não o contrário).
-Responda SOMENTE com um objeto JSON válido, sem markdown e sem texto extra.
-Formato exatamente:
-{"campos": {"__periodo__": 0, "conta_12": 3}, "periodos_matriz": [1, 2]}
-- A chave de "campos" é o identificador do campo do sistema.
-- O valor é o índice inteiro (0-based) da coluna da planilha.
-- "periodos_matriz" só se aplica ao layout matriz: lista de índices das colunas de período/valor.
-- Não atribua a mesma coluna a dois campos.
-- Se um campo não tiver coluna óbvia, omita-o.
-PROMPT;
-
-        $prompt  = "Tipo de demonstrativo: " . strtoupper((string) $upload->tipo) . "\n";
-        $prompt .= "A planilha pode ser de marketplace (Shopee, Mercado Livre), ERP ou o template do sistema.\n";
-        $prompt .= "Priorize: Data/Período, Descrição/Produto, Valor/Total. Só use conta_N se o cabeçalho for claramente essa conta.\n\n";
-        $prompt .= "Colunas da planilha:\n" . implode("\n", $linhasColunas) . "\n\n";
-        $prompt .= "Campos do sistema:\n" . implode("\n", $camposSistema);
 
         $idsValidos = [];
         foreach ($contas as $conta) {
             $idsValidos["conta_" . $conta->id] = true;
         }
+
+        $camposSistema = [
+            PlanilhaImportacaoService::DEST_PERIODO   . " → Data / competência",
+            PlanilhaImportacaoService::DEST_DESCRICAO . " → Título do anúncio / produto (texto, NÃO valor)",
+            PlanilhaImportacaoService::DEST_UNIDADE   . " → Marketplace / loja / empresa",
+            PlanilhaImportacaoService::DEST_CONTA     . " → Só se existir coluna com o NOME da conta em cada linha",
+        ];
+        foreach ($contas as $conta) {
+            $camposSistema[] = "conta_{$conta->id} → {$conta->codigo} — {$conta->nome}";
+        }
+
+        $systemPrompt = <<<PROMPT
+Você mapeia planilhas financeiras para o plano de contas. Responda SOMENTE JSON, sem markdown.
+Formato: {"campos": {"__periodo__": 0, "conta_12": 3}, "periodos_matriz": []}
+
+Regras obrigatórias:
+1. NÃO altere campos ou colunas marcados como "já mapeado". Só preencha o que falta.
+2. Cada coluna de DINHEIRO (receita, custo, tarifa, frete, cupom, comissão) deve ir para conta_N, nunca para __valor__ nem para __descricao__.
+3. __descricao__ só para título/anúncio/produto (texto). "Receita por produto" NÃO é descrição.
+4. Não use __valor__ se houver duas ou mais colunas de dinheiro.
+5. Não atribua a mesma coluna a dois campos.
+6. Se não tiver certeza, omita o campo.
+PROMPT;
+
+        $prompt  = "Tipo: " . strtoupper((string) $upload->tipo) . "\n";
+        $prompt .= "Layout: {$layout}\n\n";
+        $prompt .= "Colunas:\n" . implode("\n", $linhasColunas) . "\n\n";
+        $prompt .= "Campos possíveis:\n" . implode("\n", $camposSistema);
+
         $especiais = [
             PlanilhaImportacaoService::DEST_PERIODO   => true,
             PlanilhaImportacaoService::DEST_DESCRICAO => true,
@@ -881,7 +897,14 @@ PROMPT;
             $result = $ai->send($systemPrompt, $prompt, "", null, ["retries" => 3]);
 
             if (!$result["ok"]) {
-                echo json_encode(["ok" => false, "error" => $result["error"] ?? "Erro na IA."]);
+                echo json_encode([
+                    "ok"              => true,
+                    "layout"          => $layout,
+                    "campos"          => $base,
+                    "periodos_matriz" => $atualPeriodos,
+                    "somente_lacunas" => true,
+                    "aviso"           => "IA indisponível; usei só o motor de cabeçalhos, sem alterar o que já estava mapeado.",
+                ], JSON_UNESCAPED_UNICODE);
                 return;
             }
 
@@ -891,7 +914,14 @@ PROMPT;
 
             $decoded = json_decode($text, true);
             if (!is_array($decoded)) {
-                echo json_encode(["ok" => false, "error" => "Resposta da IA em formato inesperado."]);
+                echo json_encode([
+                    "ok"              => true,
+                    "layout"          => $layout,
+                    "campos"          => $base,
+                    "periodos_matriz" => $atualPeriodos,
+                    "somente_lacunas" => true,
+                    "aviso"           => "A IA não devolveu JSON válido; mantive o mapeamento atual e o motor.",
+                ], JSON_UNESCAPED_UNICODE);
                 return;
             }
 
@@ -924,11 +954,15 @@ PROMPT;
                 $usados[$indice] = true;
             }
 
+            $campos  = $mapper->mesclarCampos($base, $campos);
+            $periodos = $mapper->mesclarPeriodos($atualPeriodos, $periodos, $campos);
+
             echo json_encode([
                 "ok"              => true,
                 "layout"          => $layout,
                 "campos"          => $campos,
                 "periodos_matriz" => $periodos,
+                "somente_lacunas" => true,
             ], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
             echo json_encode(["ok" => false, "error" => $e->getMessage()]);

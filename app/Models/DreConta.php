@@ -202,35 +202,7 @@ class DreConta extends Model
             return $iguais[0];
         }
 
-        $contem = [];
-        if (strlen($nTexto) >= 8) {
-            foreach ($contas as $conta) {
-                $nNome = $norm((string) ($conta->nome ?? ""));
-                if ($nNome === "" || strlen($nNome) < 8) {
-                    continue;
-                }
-                if (str_contains($nTexto, $nNome) || str_contains($nNome, $nTexto)) {
-                    $contem[] = $conta;
-                }
-            }
-            if (count($contem) === 1) {
-                return $contem[0];
-            }
-        }
-
-        $parecidos = [];
-        foreach ($contas as $conta) {
-            $nNome = $norm((string) ($conta->nome ?? ""));
-            if ($nNome === "") {
-                continue;
-            }
-            similar_text($nTexto, $nNome, $pct);
-            if ($pct >= 90) {
-                $parecidos[] = $conta;
-            }
-        }
-
-        return count($parecidos) === 1 ? $parecidos[0] : null;
+        return null;
     }
 
     /**

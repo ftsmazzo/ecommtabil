@@ -319,95 +319,7 @@ class PlanilhaImportacaoService
      */
     public function sugerirCampos(array $headers, string $layout, array $contas = []): array
     {
-        $campos   = [];
-        $periodos = [];
-        $norm     = array_map([$this, "normalizar"], $headers);
-        $usados   = [];
-
-        foreach ($norm as $i => $h) {
-            if (!isset($campos[self::DEST_PERIODO]) && $this->parecePeriodo($h)) {
-                $campos[self::DEST_PERIODO] = (int) $i;
-                $usados[$i] = true;
-            }
-        }
-
-        if ($layout === self::LAYOUT_MATRIZ) {
-            foreach ($norm as $i => $h) {
-                if (isset($usados[$i])) {
-                    continue;
-                }
-                if (!isset($campos[self::DEST_CONTA]) && ($this->pareceConta($h) || $this->pareceDescricao($h))) {
-                    $campos[self::DEST_CONTA] = (int) $i;
-                    $usados[$i] = true;
-                } elseif ($this->pareceCabecalhoPeriodo($h)) {
-                    $periodos[] = (int) $i;
-                    $usados[$i] = true;
-                }
-            }
-            if (!isset($campos[self::DEST_CONTA]) && $headers !== []) {
-                $campos[self::DEST_CONTA] = 0;
-                $periodos = array_values(array_filter($periodos, fn ($i) => $i !== 0));
-            }
-            return [
-                "campos"          => $campos,
-                "periodos_matriz" => $periodos,
-            ];
-        }
-
-        foreach ($norm as $i => $h) {
-            if (isset($usados[$i])) {
-                continue;
-            }
-            if (!isset($campos[self::DEST_CONTA]) && $this->pareceConta($h)) {
-                $campos[self::DEST_CONTA] = (int) $i;
-                $usados[$i] = true;
-            } elseif (!isset($campos[self::DEST_DESCRICAO]) && $this->pareceDescricao($h)) {
-                $campos[self::DEST_DESCRICAO] = (int) $i;
-                $usados[$i] = true;
-            } elseif (!isset($campos[self::DEST_UNIDADE]) && $this->pareceUnidade($h)) {
-                $campos[self::DEST_UNIDADE] = (int) $i;
-                $usados[$i] = true;
-            }
-        }
-
-        foreach ($headers as $i => $h) {
-            if (isset($usados[$i])) {
-                continue;
-            }
-            $conta = $this->casarContaPorHeader((string) $h, $contas);
-            if ($conta) {
-                $chaveConta = "conta_" . $conta->id;
-                if (!isset($campos[$chaveConta])) {
-                    $campos[$chaveConta] = (int) $i;
-                    $usados[$i] = true;
-                }
-            }
-        }
-
-        $temContaN = false;
-        foreach (array_keys($campos) as $dest) {
-            if (str_starts_with((string) $dest, "conta_")) {
-                $temContaN = true;
-                break;
-            }
-        }
-
-        if (!$temContaN) {
-            foreach ($norm as $i => $h) {
-                if (isset($usados[$i])) {
-                    continue;
-                }
-                if (!isset($campos[self::DEST_VALOR]) && $this->pareceValor($h)) {
-                    $campos[self::DEST_VALOR] = (int) $i;
-                    $usados[$i] = true;
-                }
-            }
-        }
-
-        return [
-            "campos"          => $campos,
-            "periodos_matriz" => $periodos,
-        ];
+        return (new DeParaMapper())->sugerir($headers, $layout, $contas);
     }
 
     /**
@@ -1179,60 +1091,12 @@ class PlanilhaImportacaoService
      */
     private function casarContaPorHeader(string $header, array $contas): ?object
     {
-        $direto = DreConta::casarEmLista($contas, $header);
-        if ($direto) {
-            return $direto;
-        }
-        $canonico = $this->aliasParaConta($this->normalizar($header));
-        if ($canonico !== null) {
-            return DreConta::casarEmLista($contas, $canonico);
-        }
-        return null;
+        return (new DeParaMapper())->casarConta($header, $contas);
     }
 
-    /**
-     * Cabeçalhos de ML / Shopee / SAGA → nome da conta no plano.
-     */
     private function aliasParaConta(string $n): ?string
     {
-        $mapa = [
-            "receitaporproduto"         => "Receita Bruta",
-            "receitabruta"              => "Receita Bruta",
-            "receita"                   => "Receita Bruta",
-            "ingresos"                  => "Receita Bruta",
-            "ingresosporproducto"       => "Receita Bruta",
-            "valortotal"                => "Receita Bruta",
-            "custo"                     => "CMV",
-            "custos"                    => "CMV",
-            "cmv"                       => "CMV",
-            "tarifadevendaeimpostos"    => "Tarifa de venda e impostos",
-            "tarifadevenda"             => "Tarifa de venda e impostos",
-            "taxas"                     => "Tarifa de venda e impostos",
-            "impostos"                  => "Tarifa de venda e impostos",
-            "receitaporenvio"           => "Receita por envio",
-            "tarifasdeenvio"            => "Tarifas de Envio",
-            "fretes"                    => "Tarifas de Envio",
-            "cupom"                     => "Cupons e Descontos",
-            "cupons"                    => "Cupons e Descontos",
-            "descontos"                 => "Cupons e Descontos",
-            "cancelamentoseereembolsos" => "Cupons e Descontos",
-            "cancelamentosereembolsos"  => "Cupons e Descontos",
-            "comissaoafiliado"          => "Comissão de Afiliados",
-            "comissoes"                 => "Comissão de Afiliados",
-            "freteentregadireta"        => "Frete Entrega Direta",
-            "folhaadministrativa"       => "Folha administrativa",
-            "aluguel"                   => "Aluguel",
-            "marketing"                 => "Marketing",
-            "despesasoperacionais"      => "Despesas Operacionais",
-            "despesas"                  => "Despesas Operacionais",
-            "depreciacao"               => "Depreciação",
-            "resultadofinanceiro"       => "Resultado Financeiro",
-            "caixaeequivalentes"        => "Caixa e Equivalentes",
-            "contasareceber"            => "Contas a Receber",
-            "estoques"                  => "Estoques",
-            "fornecedores"              => "Fornecedores",
-        ];
-        return $mapa[$n] ?? null;
+        return (new DeParaMapper())->aliasParaConta($n);
     }
 
     private function periodoDoDestinoMatriz(string $destino, string $header): ?string
@@ -1344,13 +1208,7 @@ class PlanilhaImportacaoService
 
     private function pareceDescricao(string $n): bool
     {
-        return in_array($n, [
-            "descricao", "historico", "observacao", "obs", "detalhe", "produto",
-            "item", "nomeproduto", "titulo", "titulodoanuncio", "titulodelapublicacion",
-            "title", "publicacion", "anuncio",
-        ], true)
-            || str_contains($n, "titulo")
-            || str_contains($n, "produto");
+        return (new DeParaMapper())->pareceDescricao($n);
     }
 
     private function pareceUnidade(string $n): bool
