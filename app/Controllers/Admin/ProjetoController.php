@@ -487,7 +487,7 @@ class ProjetoController extends ControllerAdmin
             ],
             "page" => [
                 "title" => "De-para de colunas",
-                "desc"  => $projetoLabel . " — " . strtoupper($upload->tipo) . ": cada coluna do Excel → data, descrição, conta ou ignorar",
+                "desc"  => $projetoLabel . " — " . strtoupper($upload->tipo) . ": campo do modelo ← coluna do cliente",
             ],
         ]);
 

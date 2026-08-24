@@ -387,24 +387,55 @@ class PlanilhaImportacaoService
         }
 
         $parametrizado = $campos !== [];
+        $destinosJa    = array_column($campos, "destino");
 
-        if (!$parametrizado) {
-            $padrao = [
-                [self::DEST_PERIODO,   "Período / Data",              "Ex.: coluna Data da Shopee ou competência"],
-                [self::DEST_DESCRICAO, "Descrição",                   "Ex.: produto, histórico, observações"],
-                [self::DEST_VALOR,     "Valor",                       "Ex.: coluna Total, Valor, Receita"],
-                [self::DEST_UNIDADE,   "Unidade / Centro de custo",   "Opcional"],
-                [self::DEST_CONTA,     "Conta (texto na planilha)",   "Se cada linha traz o nome ou código da conta"],
+        if (!in_array(self::DEST_PERIODO, $destinosJa, true)) {
+            array_unshift($campos, [
+                "destino" => self::DEST_PERIODO,
+                "label"   => "Data / competência",
+                "hint"    => "Coluna de data da planilha do cliente",
+                "grupo"   => "modelo",
+                "busca"   => "data periodo competencia",
+            ]);
+            $destinosJa[] = self::DEST_PERIODO;
+        }
+        if (!in_array(self::DEST_DESCRICAO, $destinosJa, true)) {
+            $campos[] = [
+                "destino" => self::DEST_DESCRICAO,
+                "label"   => "Descrição",
+                "hint"    => "Produto, título do anúncio ou histórico",
+                "grupo"   => "modelo",
+                "busca"   => "descricao produto titulo",
             ];
-            foreach ($padrao as [$destino, $label, $hint]) {
+            $destinosJa[] = self::DEST_DESCRICAO;
+        }
+
+        foreach ($contasGrupos as $raiz => $contasDoGrupo) {
+            foreach ($contasDoGrupo as $conta) {
+                $destino = "conta_" . (int) $conta->id;
+                if (in_array($destino, $destinosJa, true)) {
+                    continue;
+                }
+                $label = trim((string) $conta->codigo . " — " . (string) $conta->nome);
                 $campos[] = [
                     "destino" => $destino,
                     "label"   => $label,
-                    "hint"    => $hint,
-                    "grupo"   => "modelo",
+                    "hint"    => "Conta do modelo. Escolha a coluna de valor do cliente, ou deixe vazio.",
+                    "grupo"   => (string) $raiz,
                     "busca"   => mb_strtolower($label, "UTF-8"),
                 ];
+                $destinosJa[] = $destino;
             }
+        }
+
+        if (!in_array(self::DEST_UNIDADE, $destinosJa, true)) {
+            $campos[] = [
+                "destino" => self::DEST_UNIDADE,
+                "label"   => "Unidade / Marketplace",
+                "hint"    => "Opcional",
+                "grupo"   => "modelo",
+                "busca"   => "unidade marketplace",
+            ];
         }
 
         return [
