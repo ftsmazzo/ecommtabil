@@ -46,8 +46,9 @@ class ConfiguracaoController extends ControllerAdmin
     {
         $modelo = ModeloDemonstrativo::padraoPorTipo($tipo);
         if (!$modelo) {
-            $this->message->warning("Nenhum modelo de demonstrativo encontrado para o tipo " . strtoupper($tipo));
-            $this->router->redirect("admin.configuracao.planilha");
+            $tipoRow = TipoDemonstrativo::porSigla($tipo);
+            $nome    = $tipoRow->nome ?? strtoupper($tipo);
+            $modelo  = ModeloDemonstrativo::criarPadraoParaTipo($tipo, $nome, (int) ($this->user->uid ?? 0));
         }
         return $modelo;
     }
@@ -58,6 +59,7 @@ class ConfiguracaoController extends ControllerAdmin
 
         $tipo  = $this->resolverTipo($request);
         $modelo = $this->modeloDoTipo($tipo);
+        PlanilhaModeloColuna::garantirPadrao((int) $modelo->id, (int) ($this->user->uid ?? 0));
 
         $this->view->addData([
             "breadcrumb" => [
@@ -66,7 +68,7 @@ class ConfiguracaoController extends ControllerAdmin
             ],
             "page" => [
                 "title" => "Planilha Modelo — " . strtoupper($tipo),
-                "desc"  => "Defina os campos que o de-para vai pedir ao importar " . strtoupper($tipo),
+                "desc"  => "Template opcional para download. O campo do demonstrativo é o que vale no de-para; sem ele a coluna não entra na importação.",
             ],
         ]);
 
