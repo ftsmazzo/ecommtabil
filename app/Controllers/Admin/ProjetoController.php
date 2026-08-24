@@ -409,6 +409,7 @@ class ProjetoController extends ControllerAdmin
             $headers = $lido["headers"];
             $previews = $lido["previews"];
             $colunas = $svc->rotulosColunas($headers, $previews);
+            $linhaCabecalho = (int) ($lido["linhaCabecalho"] ?? 1);
 
             $contasGrupos = DreConta::analiticasPorTipo($upload->tipo);
             $contasLista  = DreConta::analiticasLista($upload->tipo);
@@ -492,6 +493,7 @@ class ProjetoController extends ControllerAdmin
             "origemMapeamento"      => $origemMapeamento,
             "mapeamentoSalvo"       => $mapaSalvo,
             "lancamentosExistentes" => $lancamentosExistentes,
+            "linhaCabecalho"        => $linhaCabecalho,
             "csrf"                  => $this->csrf->generate(),
         ]);
     }

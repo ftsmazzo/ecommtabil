@@ -45,22 +45,24 @@ class PlanilhaImportacaoService
     }
 
     /**
-     * @return array{headers: array<int,string>, previews: array<int,array<int,string>>, highestRow: int, highestCol: int}
+     * @return array{headers: array<int,string>, previews: array<int,array<int,string>>, highestRow: int, highestCol: int, linhaCabecalho: int}
      */
     public function lerCabecalhos(Worksheet $sheet, int $linhasPreview = 3): array
     {
         $highestCol = Coordinate::columnIndexFromString($sheet->getHighestDataColumn());
         $highestRow = (int) $sheet->getHighestDataRow();
+        $linhaCab   = $this->detectarLinhaCabecalho($sheet, $highestCol, $highestRow);
         $headers    = [];
         $previews   = [];
 
         for ($c = 1; $c <= $highestCol; $c++) {
-            $header = $this->celula($sheet, 1, $c, false);
+            $header = $this->celula($sheet, $linhaCab, $c, false);
             $letra  = Coordinate::stringFromColumnIndex($c);
 
             $preview = [];
-            $limite  = min(1 + $linhasPreview, $highestRow);
-            for ($r = 2; $r <= $limite; $r++) {
+            $inicio  = $linhaCab + 1;
+            $limite  = min($linhaCab + $linhasPreview, $highestRow);
+            for ($r = $inicio; $r <= $limite; $r++) {
                 $val = trim((string) $this->celula($sheet, $r, $c, false));
                 if ($val !== "") {
                     $preview[] = $val;
@@ -72,11 +74,62 @@ class PlanilhaImportacaoService
         }
 
         return [
-            "headers"    => $headers,
-            "previews"   => $previews,
-            "highestRow" => $highestRow,
-            "highestCol" => $highestCol,
+            "headers"         => $headers,
+            "previews"        => $previews,
+            "highestRow"      => $highestRow,
+            "highestCol"      => $highestCol,
+            "linhaCabecalho"  => $linhaCab,
         ];
+    }
+
+    /**
+     * Planilhas do Mercado Livre / Shopee costumam ter título ou filtros nas primeiras linhas.
+     */
+    public function detectarLinhaCabecalho(Worksheet $sheet, int $highestCol, int $highestRow): int
+    {
+        $limite = min(15, max(1, $highestRow));
+        $melhor = 1;
+        $melhorScore = -1;
+
+        for ($r = 1; $r <= $limite; $r++) {
+            $texto = 0;
+            $numero = 0;
+            $bonus = 0;
+            for ($c = 1; $c <= $highestCol; $c++) {
+                $val = trim((string) $this->celula($sheet, $r, $c, false));
+                if ($val === "") {
+                    continue;
+                }
+                $n = $this->normalizar($val);
+                if ($n === "") {
+                    continue;
+                }
+                if (preg_match('/^-?\d+([.,]\d+)?$/', $val) || preg_match('/^\d{1,2}[\/\-]\d{1,2}/', $val)) {
+                    $numero++;
+                    continue;
+                }
+                $texto++;
+                if (
+                    $this->parecePeriodo($n) || $this->pareceValor($n) || $this->pareceDescricao($n)
+                    || $this->pareceConta($n) || $this->pareceUnidade($n)
+                ) {
+                    $bonus += 4;
+                }
+                if (preg_match('/(data|fecha|titulo|title|sku|pedido|order|total|receita|ingreso|anuncio|produto|product|venda|venta)/', $n)) {
+                    $bonus += 2;
+                }
+            }
+            if ($texto < 2) {
+                continue;
+            }
+            $score = ($texto * 2) + $bonus - $numero;
+            if ($score > $melhorScore) {
+                $melhorScore = $score;
+                $melhor = $r;
+            }
+        }
+
+        return $melhor;
     }
 
     /**
@@ -546,10 +599,11 @@ class PlanilhaImportacaoService
         $headers = $info["headers"];
         $highestRow = max(2, $info["highestRow"]);
         $highestCol = $info["highestCol"];
+        $primeiraLinha = ((int) ($info["linhaCabecalho"] ?? 1)) + 1;
 
         $executar = function () use (
             $sheet, $mapa, $headers, $highestRow, $highestCol,
-            $idProjeto, $tipo, $aba, $idUsuario, $layout, $idContaPadrao
+            $idProjeto, $tipo, $aba, $idUsuario, $layout, $idContaPadrao, $primeiraLinha
         ) {
             if ($this->gravar) {
                 ProjetoLancamento::limparPorProjeto($idProjeto, $tipo, $aba);
@@ -560,17 +614,17 @@ class PlanilhaImportacaoService
             if ($layout === self::LAYOUT_LEDGER) {
                 [$inseridos, $ignorados, $naoAcharam] = $this->processarLedger(
                     $sheet, $mapa, $indicePorDestino, $headers, $highestRow, $highestCol,
-                    $idProjeto, $tipo, $aba, $idUsuario, $idContaPadrao
+                    $idProjeto, $tipo, $aba, $idUsuario, $idContaPadrao, $primeiraLinha
                 );
             } elseif ($layout === self::LAYOUT_MATRIZ) {
                 [$inseridos, $ignorados, $naoAcharam] = $this->processarMatriz(
                     $sheet, $mapa, $indicePorDestino, $headers, $highestRow, $highestCol,
-                    $idProjeto, $tipo, $aba, $idUsuario
+                    $idProjeto, $tipo, $aba, $idUsuario, $primeiraLinha
                 );
             } else {
                 [$inseridos, $ignorados, $naoAcharam] = $this->processarColunar(
                     $sheet, $mapa, $indicePorDestino, $headers, $highestRow, $highestCol,
-                    $idProjeto, $tipo, $aba, $idUsuario
+                    $idProjeto, $tipo, $aba, $idUsuario, $primeiraLinha
                 );
             }
 
@@ -778,7 +832,8 @@ class PlanilhaImportacaoService
         string $tipo,
         int $aba,
         int $idUsuario,
-        ?int $idContaPadrao = null
+        ?int $idContaPadrao = null,
+        int $primeiraLinha = 2
     ): array {
         $colConta   = isset($indicePorDestino[self::DEST_CONTA]) ? (int) $indicePorDestino[self::DEST_CONTA] : null;
         $colValor   = isset($indicePorDestino[self::DEST_VALOR]) ? (int) $indicePorDestino[self::DEST_VALOR] : null;
@@ -798,7 +853,7 @@ class PlanilhaImportacaoService
         $ignorados  = 0;
         $naoAcharam = [];
 
-        for ($r = 2; $r <= $highestRow; $r++) {
+        for ($r = $primeiraLinha; $r <= $highestRow; $r++) {
             $linha = $this->linha($sheet, $r, $highestCol);
             if ($this->linhaVazia($linha)) {
                 continue;
@@ -875,7 +930,8 @@ class PlanilhaImportacaoService
         int $idProjeto,
         string $tipo,
         int $aba,
-        int $idUsuario
+        int $idUsuario,
+        int $primeiraLinha = 2
     ): array {
         $colConta  = isset($indicePorDestino[self::DEST_CONTA]) ? (int) $indicePorDestino[self::DEST_CONTA] : null;
         $colsValor = [];
@@ -889,7 +945,7 @@ class PlanilhaImportacaoService
         $ignorados  = 0;
         $naoAcharam = [];
 
-        for ($r = 2; $r <= $highestRow; $r++) {
+        for ($r = $primeiraLinha; $r <= $highestRow; $r++) {
             $linha = $this->linha($sheet, $r, $highestCol);
             if ($this->linhaVazia($linha)) {
                 continue;
@@ -958,7 +1014,8 @@ class PlanilhaImportacaoService
         int $idProjeto,
         string $tipo,
         int $aba,
-        int $idUsuario
+        int $idUsuario,
+        int $primeiraLinha = 2
     ): array {
         $colPeriodo = isset($indicePorDestino[self::DEST_PERIODO]) ? (int) $indicePorDestino[self::DEST_PERIODO] : null;
         $colDesc    = isset($indicePorDestino[self::DEST_DESCRICAO]) ? (int) $indicePorDestino[self::DEST_DESCRICAO] : null;
@@ -968,7 +1025,7 @@ class PlanilhaImportacaoService
         $ignorados  = 0;
         $naoAcharam = [];
 
-        for ($r = 2; $r <= $highestRow; $r++) {
+        for ($r = $primeiraLinha; $r <= $highestRow; $r++) {
             $linha = $this->linha($sheet, $r, $highestCol);
             if ($this->linhaVazia($linha)) {
                 continue;
@@ -1110,28 +1167,46 @@ class PlanilhaImportacaoService
 
     private function parecePeriodo(string $n): bool
     {
-        return in_array($n, ["periodo", "competencia", "data", "datavenda", "datadavenda", "mes", "ano"], true)
+        return in_array($n, [
+            "periodo", "competencia", "data", "datavenda", "datadavenda", "mes", "ano",
+            "fecha", "fechaventa", "fechadeventa", "date", "orderdate",
+        ], true)
             || str_contains($n, "periodo")
-            || str_contains($n, "competencia");
+            || str_contains($n, "competencia")
+            || str_contains($n, "datavenda")
+            || str_contains($n, "fechadeventa")
+            || str_contains($n, "fechaventa");
     }
 
     private function pareceConta(string $n): bool
     {
         return in_array($n, [
             "conta", "contaplano", "nomedaconta", "descricaodaconta",
-            "classificacao", "item", "rubrica",
-        ], true) || str_starts_with($n, "conta");
+            "classificacao", "rubrica",
+        ], true) || (str_starts_with($n, "conta") && !str_contains($n, "contato"));
     }
 
     private function pareceValor(string $n): bool
     {
-        return in_array($n, ["valor", "valortotal", "vlr", "amount", "valorrs", "total", "preco", "receita"], true)
-            || str_contains($n, "valortotal");
+        return in_array($n, [
+            "valor", "valortotal", "vlr", "amount", "valorrs", "total", "preco", "receita",
+            "ingresos", "ingresosporproducto", "receitaporproduto", "preciounitario",
+        ], true)
+            || str_contains($n, "valortotal")
+            || str_contains($n, "receitapor")
+            || str_contains($n, "ingresospor")
+            || ($n === "ingreso");
     }
 
     private function pareceDescricao(string $n): bool
     {
-        return in_array($n, ["descricao", "historico", "observacao", "obs", "detalhe", "produto", "item", "nomeproduto"], true);
+        return in_array($n, [
+            "descricao", "historico", "observacao", "obs", "detalhe", "produto",
+            "item", "nomeproduto", "titulo", "titulodoanuncio", "titulodelapublicacion",
+            "title", "publicacion", "anuncio",
+        ], true)
+            || str_contains($n, "titulo")
+            || str_contains($n, "produto");
     }
 
     private function pareceUnidade(string $n): bool
