@@ -852,17 +852,36 @@ class ProjetoController extends ControllerAdmin
         $base  = $mapper->mesclarCampos($atualCampos, $motor["campos"]);
         $periodosMotor = $mapper->mesclarPeriodos($atualPeriodos, $motor["periodos_matriz"], $base);
 
-        $linhasColunas = [];
+        $usadas = array_flip(array_map("intval", array_values($base)));
+        $lacunas = [];
         foreach ($headers as $i => $h) {
-            $letra = $svc->letra((int) $i);
-            $lock  = "";
-            foreach ($base as $d => $idx) {
-                if ((int) $idx === (int) $i) {
-                    $lock = " [já mapeado: {$d} — não altere]";
-                    break;
-                }
+            $i = (int) $i;
+            if (isset($usadas[$i])) {
+                continue;
             }
-            $linhasColunas[] = "  [{$i}] {$letra} — " . trim((string) $h) . $lock;
+            $n = $mapper->normalizar((string) $h);
+            if ($mapper->pareceIgnorar($n)) {
+                continue;
+            }
+            $candidato = $mapper->aliasPorFragmento($n)
+                || $mapper->aliasParaConta($n)
+                || $mapper->pareceDescricao($n)
+                || $mapper->notaPeriodo($n) > 0;
+            if ($candidato) {
+                $lacunas[] = "  [{$i}] " . $svc->letra($i) . " — " . trim((string) $h);
+            }
+        }
+
+        if ($lacunas === []) {
+            echo json_encode([
+                "ok"              => true,
+                "layout"          => $layout,
+                "campos"          => $base,
+                "periodos_matriz" => $periodosMotor,
+                "somente_lacunas" => true,
+                "aviso"           => "Motor ML/Shopee aplicado. Não havia coluna de valor ou data solta para a IA completar.",
+            ], JSON_UNESCAPED_UNICODE);
+            return;
         }
 
         $idsValidos = [];
@@ -872,34 +891,25 @@ class ProjetoController extends ControllerAdmin
 
         $camposSistema = [
             PlanilhaImportacaoService::DEST_PERIODO   . " → Data / competência",
-            PlanilhaImportacaoService::DEST_DESCRICAO . " → Título do anúncio / produto (texto, NÃO valor)",
-            PlanilhaImportacaoService::DEST_UNIDADE   . " → Marketplace / loja / empresa",
-            PlanilhaImportacaoService::DEST_CONTA     . " → Só se existir coluna com o NOME da conta em cada linha",
+            PlanilhaImportacaoService::DEST_DESCRICAO . " → Título / nome do item (texto)",
+            PlanilhaImportacaoService::DEST_UNIDADE   . " → Marketplace / loja",
         ];
         foreach ($contas as $conta) {
-            $camposSistema[] = "conta_{$conta->id} → {$conta->codigo} — {$conta->nome}";
+            $ja = isset($base["conta_" . $conta->id]) ? " [já preenchido]" : "";
+            $camposSistema[] = "conta_{$conta->id} → {$conta->nome}{$ja}";
         }
 
         $dicionario = $mapper->dicaPromptIa();
         $systemPrompt = <<<PROMPT
-Você mapeia planilhas de marketplace (Mercado Livre / Shopee) para o modelo SAGA/DRE.
-Responda SOMENTE JSON, sem markdown.
-Formato: {"campos": {"__periodo__": 0, "conta_12": 3}, "periodos_matriz": []}
-
+Você completa LACUNAS de de-para Shopee/Mercado Livre → DRE SAGA.
+Responda SOMENTE JSON: {"campos": {"__periodo__": 0, "conta_12": 3}, "periodos_matriz": []}
+Só use os índices das colunas listadas em LACUNAS.
 {$dicionario}
-
-Regras:
-1. NÃO altere o que está "já mapeado". Só preencha lacunas.
-2. Coluna de DINHEIRO → conta_N (nunca __descricao__ nem Total).
-3. __descricao__ só título/produto (texto).
-4. Não atribua a mesma coluna a dois campos.
-5. Folha, Aluguel, Depreciação: omita se não houver coluna clara.
 PROMPT;
 
         $prompt  = "Tipo: " . strtoupper((string) $upload->tipo) . "\n";
-        $prompt .= "Layout: {$layout}\n\n";
-        $prompt .= "Colunas:\n" . implode("\n", $linhasColunas) . "\n\n";
-        $prompt .= "Campos possíveis:\n" . implode("\n", $camposSistema);
+        $prompt .= "LACUNAS (ainda sem mapeamento):\n" . implode("\n", $lacunas) . "\n\n";
+        $prompt .= "Campos:\n" . implode("\n", $camposSistema);
 
         $especiais = [
             PlanilhaImportacaoService::DEST_PERIODO   => true,
@@ -912,7 +922,7 @@ PROMPT;
 
         try {
             $ai     = new ChatGPT();
-            $result = $ai->send($systemPrompt, $prompt, "", null, ["retries" => 3]);
+            $result = $ai->send($systemPrompt, $prompt, "", null, ["retries" => 0]);
 
             if (!$result["ok"]) {
                 echo json_encode([

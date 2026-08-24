@@ -514,13 +514,17 @@ $renderLinhaModelo = function (array $campo) use ($renderSelect, $campos): void 
                 body += "&periodos_atuais[]=" + encodeURIComponent(cb.value);
             });
 
+            var ac = new AbortController();
+            var to = setTimeout(function () { ac.abort(); }, 20000);
             fetch(sugerirUrl, {
                 method: "POST",
                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
                 body: body,
+                signal: ac.signal,
             })
             .then(function (r) { return r.json(); })
             .then(function (data) {
+                clearTimeout(to);
                 btnIa.disabled = false;
                 btnIa.innerHTML = '<i class="ti ti-sparkles me-1"></i>Preencher o que falta';
 
@@ -563,10 +567,13 @@ $renderLinhaModelo = function (array $campo) use ($renderSelect, $campos): void 
                     : "Nada novo para preencher." + extra;
                 feedback.className = aplicados > 0 ? "ms-2 small text-success" : "ms-2 small text-muted";
             })
-            .catch(function () {
+            .catch(function (err) {
                 btnIa.disabled = false;
                 btnIa.innerHTML = '<i class="ti ti-sparkles me-1"></i>Preencher o que falta';
-                document.getElementById("ia-feedback").textContent = "Erro de conexão.";
+                var msg = (err && err.name === "AbortError")
+                    ? "A IA demorou demais e foi interrompida. O motor já deve ter preenchido o que reconheceu — recarregue a página."
+                    : "Erro de conexão.";
+                document.getElementById("ia-feedback").textContent = msg;
                 document.getElementById("ia-feedback").className = "ms-2 small text-danger";
             });
         });

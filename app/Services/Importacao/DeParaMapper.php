@@ -22,11 +22,10 @@ class DeParaMapper
         $norm     = array_map([$this, "normalizar"], $headers);
         $usados   = [];
 
-        foreach ($norm as $i => $h) {
-            if (!isset($campos[PlanilhaImportacaoService::DEST_PERIODO]) && $this->parecePeriodo($h)) {
-                $campos[PlanilhaImportacaoService::DEST_PERIODO] = (int) $i;
-                $usados[$i] = true;
-            }
+        $melhorData = $this->melhorIndicePeriodo($norm);
+        if ($melhorData !== null) {
+            $campos[PlanilhaImportacaoService::DEST_PERIODO] = $melhorData;
+            $usados[$melhorData] = true;
         }
 
         if ($layout === PlanilhaImportacaoService::LAYOUT_MATRIZ) {
@@ -64,6 +63,9 @@ class DeParaMapper
 
         foreach ($headers as $i => $h) {
             if (isset($usados[$i])) {
+                continue;
+            }
+            if ($this->pareceIgnorar($this->normalizar((string) $h))) {
                 continue;
             }
             $conta = $this->casarConta((string) $h, $contas);
@@ -163,7 +165,8 @@ class DeParaMapper
      */
     public function casarConta(string $header, array $contas): ?object
     {
-        $canonico = $this->aliasParaConta($this->normalizar($header));
+        $n = $this->normalizar($header);
+        $canonico = $this->aliasPorFragmento($n) ?? $this->aliasParaConta($n);
         if ($canonico !== null) {
             $porAlias = DreConta::casarEmLista($contas, $canonico);
             if ($porAlias) {
@@ -171,6 +174,118 @@ class DeParaMapper
             }
         }
         return DreConta::casarEmLista($contas, $header);
+    }
+
+    /**
+     * Regras por pedaço do cabeçalho (Shopee BR, ML ES/PT). Ordem = mais específico primeiro.
+     */
+    public function aliasPorFragmento(string $n): ?string
+    {
+        if ($n === "" || $this->pareceIgnorar($n)) {
+            return null;
+        }
+        $regras = [
+            ["taxadecomissaodeafiliado", "Comissão de Afiliados"],
+            ["comissaodeafiliado", "Comissão de Afiliados"],
+            ["taxadecomissao", "Tarifa de venda e impostos"],
+            ["taxadeservico", "Tarifa de venda e impostos"],
+            ["taxadetransacao", "Tarifa de venda e impostos"],
+            ["taxadecomiss", "Tarifa de venda e impostos"],
+            ["valortotaldoproduto", "Receita Bruta"],
+            ["precoacordado", "Receita Bruta"],
+            ["precodoitem", "Receita Bruta"],
+            ["subtotaldoproduto", "Receita Bruta"],
+            ["custodeenviopagopelocomprador", "Receita por envio"],
+            ["enviopagopelocomprador", "Receita por envio"],
+            ["fretepagopelocomprador", "Receita por envio"],
+            ["estimativadefrete", "Tarifas de Envio"],
+            ["reembolsodefrete", "Tarifas de Envio"],
+            ["descontodovendedor", "Cupons e Descontos"],
+            ["descontodoshopee", "Cupons e Descontos"],
+            ["descontoshopee", "Cupons e Descontos"],
+            ["cupomdaloja", "Cupons e Descontos"],
+            ["cupomshopee", "Cupons e Descontos"],
+            ["moedinhashopee", "Cupons e Descontos"],
+            ["moedas shopee", "Cupons e Descontos"],
+            ["cargoporserviciodeventa", "Tarifa de venda e impostos"],
+            ["ingresosporproducto", "Receita Bruta"],
+            ["receitaporproduto", "Receita Bruta"],
+        ];
+        foreach ($regras as [$frag, $conta]) {
+            $frag = $this->normalizar($frag);
+            if ($frag !== "" && str_contains($n, $frag)) {
+                return $conta;
+            }
+        }
+        return null;
+    }
+
+    public function pareceIgnorar(string $n): bool
+    {
+        if ($n === "") {
+            return true;
+        }
+        foreach (["valor", "preco", "taxa", "receita", "custo", "frete", "cupom", "desconto", "comiss", "ingreso", "tarifa"] as $keep) {
+            if (str_contains($n, $keep)) {
+                return false;
+            }
+        }
+        if ($this->notaPeriodo($n) > 0) {
+            return false;
+        }
+        $lixo = [
+            "statusdopedido", "status", "sku", "skudaloja", "quantidade", "qtd",
+            "unidades", "username", "comprador", "telefone", "cpf", "cnpj", "cep",
+            "cidade", "estado", "endereco", "rastreio", "tracking", "notafiscal", "motivo",
+            "prazodeenvio", "metododepagamento", "metododeenvio", "variacao",
+            "npedido", "nopedido", "idpedido", "orderid", "numerodopedido",
+        ];
+        foreach ($lixo as $x) {
+            if ($n === $x || (strlen($x) >= 5 && str_contains($n, $x))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @param array<int,string> $norm
+     */
+    public function melhorIndicePeriodo(array $norm): ?int
+    {
+        $melhor = null;
+        $melhorNota = -1;
+        foreach ($norm as $i => $h) {
+            $nota = $this->notaPeriodo($h);
+            if ($nota > $melhorNota) {
+                $melhorNota = $nota;
+                $melhor = (int) $i;
+            }
+        }
+        return $melhorNota > 0 ? $melhor : null;
+    }
+
+    public function notaPeriodo(string $n): int
+    {
+        if ($n === "") {
+            return 0;
+        }
+        if (str_contains($n, "prazodeenvio") || str_contains($n, "dataenvio") || str_contains($n, "datadeconclusao")) {
+            return 0;
+        }
+        if (str_contains($n, "datadavenda") || str_contains($n, "fechadeventa") || $n === "datavenda") {
+            return 100;
+        }
+        if (str_contains($n, "datapagamentodopedido") || str_contains($n, "datapagamento")) {
+            return 90;
+        }
+        if (str_contains($n, "datadecriacaodopedido") || str_contains($n, "datadecriacao")) {
+            return 80;
+        }
+        if ($this->parecePeriodo($n)) {
+            return 40;
+        }
+        return 0;
     }
 
     public function aliasParaConta(string $n): ?string
@@ -254,14 +369,14 @@ class DeParaMapper
             "receitabruta" => [
                 "label" => "Receita Bruta",
                 "hint" => "Valor bruto do produto (positivo). Obrigatório numa planilha de vendas.",
-                "exemplos" => "Receita por Produto · Ingresos por producto",
+                "exemplos" => "Receita por Produto · Valor total do produto · Preço acordado · Ingresos por producto",
                 "obrigatorio" => false,
                 "esperado" => true,
             ],
             "receitaporenvio" => [
                 "label" => "Receita por envio",
                 "hint" => "Frete que o comprador pagou (positivo). Vazio se a planilha não tiver essa coluna.",
-                "exemplos" => "Receita por envio · Ingreso por envío · Frete Comprador",
+                "exemplos" => "Receita por envio · Frete Comprador · Custo de envio pago pelo comprador",
                 "obrigatorio" => false,
                 "esperado" => true,
             ],
@@ -275,14 +390,14 @@ class DeParaMapper
             "tarifadevendaeimpostos" => [
                 "label" => "Tarifa de venda e impostos",
                 "hint" => "Comissão/tarifa do marketplace, em geral negativa no arquivo do ML.",
-                "exemplos" => "Tarifa de venda e impostos · Cargo por servicio de venta",
+                "exemplos" => "Tarifa de venda e impostos · Cargo por servicio · Taxa de comissão · Taxa de serviço · Taxa de transação",
                 "obrigatorio" => false,
                 "esperado" => true,
             ],
             "cuponsedescontos" => [
                 "label" => "Cupons e Descontos",
                 "hint" => "Cupom, cancelamento e reembolso (em geral negativo).",
-                "exemplos" => "Cupom · Cancelamentos e Reembolsos · Descuentos",
+                "exemplos" => "Cupom · Cancelamentos e Reembolsos · Cupom da loja · Desconto do vendedor · Desconto Shopee",
                 "obrigatorio" => false,
                 "esperado" => true,
             ],
@@ -324,7 +439,7 @@ class DeParaMapper
             "tarifasdeenvio" => [
                 "label" => "Tarifas de Envio",
                 "hint" => "Custo de frete do vendedor (em geral negativo no ML).",
-                "exemplos" => "Tarifas de Envio · Costo envío · Frete Vendedor",
+                "exemplos" => "Tarifas de Envio · Estimativa de frete · Frete Vendedor · Costo envío",
                 "obrigatorio" => false,
                 "esperado" => true,
             ],
@@ -440,7 +555,16 @@ Dicionário do modelo SAGA (planilha de vendas marketplace):
 - Cupom / Cancelamentos e Reembolsos → Cupons e Descontos
 - Comissão Afiliado → Comissão de Afiliados
 - Frete Entrega Direta → Frete Entrega Direta
-NÃO mapear: Nº de venda, SKU, Estado, Depósito, Unidades, Total (o Total do modelo SAGA é calculado e não entra no DRE).
+Dicionário Shopee (exportação de pedidos BR):
+- Data de criação do pedido / Data de pagamento do pedido → __periodo__
+- Nome do item / Nome do produto → __descricao__
+- Valor total do produto / Preço acordado → Receita Bruta
+- Taxa de comissão / Taxa de serviço / Taxa de transação → Tarifa de venda e impostos
+- Taxa de comissão de afiliados → Comissão de Afiliados
+- Cupom da loja / Cupom Shopee / Desconto do vendedor / Desconto Shopee → Cupons e Descontos
+- Custo de envio pago pelo comprador → Receita por envio
+- Estimativa de frete / Reembolso de frete → Tarifas de Envio
+NÃO mapear: Nº do pedido, Status, SKU, Quantidade, CPF, cidade, estado, Total estimado do pedido.
 Folha, Aluguel, Marketing, Depreciação: só mapeie se existir coluna com esse sentido. Vazio é válido.
 TXT;
     }
@@ -465,7 +589,8 @@ TXT;
             || str_contains($n, "datadavenda")
             || str_contains($n, "fechadeventa")
             || str_contains($n, "fechaventa")
-            || str_contains($n, "datadecriacao");
+            || str_contains($n, "datadecriacao")
+            || str_contains($n, "datapagamento");
     }
 
     public function pareceConta(string $n): bool
@@ -486,17 +611,19 @@ TXT;
 
     public function pareceDescricao(string $n): bool
     {
-        if ($this->aliasParaConta($n) !== null || $this->pareceValor($n) || $this->parecePeriodo($n)) {
+        if ($this->aliasPorFragmento($n) !== null || $this->aliasParaConta($n) !== null || $this->pareceValor($n) || $this->parecePeriodo($n)) {
             return false;
         }
         return in_array($n, [
             "descricao", "historico", "observacao", "obs", "detalhe", "produto",
-            "item", "nomeproduto", "titulo", "titulodoanuncio", "titulodelapublicacion",
+            "nomeproduto", "nomedoitem", "nomedoproduto", "descricaodoitem", "descricaodoproduto",
+            "titulo", "titulodoanuncio", "titulodelapublicacion",
             "title", "publicacion", "anuncio", "nombredelproducto", "nombredelarticulo",
         ], true)
             || str_starts_with($n, "titulo")
-            || $n === "nomeproduto"
-            || $n === "titulodoanuncio";
+            || str_contains($n, "nomedoitem")
+            || str_contains($n, "nomedoproduto")
+            || str_contains($n, "descricaodoitem");
     }
 
     public function pareceUnidade(string $n): bool
