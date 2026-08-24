@@ -487,7 +487,7 @@ class ProjetoController extends ControllerAdmin
             ],
             "page" => [
                 "title" => "De-para de colunas",
-                "desc"  => $projetoLabel . " — " . strtoupper($upload->tipo) . ": o que o demonstrativo precisa × coluna da planilha",
+                "desc"  => $projetoLabel . " — " . strtoupper($upload->tipo) . ": cada coluna do Excel → data, descrição, conta ou ignorar",
             ],
         ]);
 
@@ -612,8 +612,21 @@ class ProjetoController extends ControllerAdmin
             $contaPadrao = null;
         }
 
+        $camposPost = (array) ($data->campos ?? []);
+        $colDestino = (array) ($data->col_destino ?? []);
+        if ($colDestino !== []) {
+            $camposPost = [];
+            foreach ($colDestino as $indice => $destino) {
+                $destino = trim((string) $destino);
+                if ($destino === "") {
+                    continue;
+                }
+                $camposPost[$destino] = (int) $indice;
+            }
+        }
+
         $linhas = $svc->compactarCampos(
-            (array) ($data->campos ?? []),
+            $camposPost,
             $headers,
             (array) ($data->periodos_matriz ?? []),
             $anoBase
@@ -839,19 +852,6 @@ class ProjetoController extends ControllerAdmin
         $base  = $mapper->mesclarCampos($atualCampos, $motor["campos"]);
         $periodosMotor = $mapper->mesclarPeriodos($atualPeriodos, $motor["periodos_matriz"], $base);
 
-        $usarIa = (int) ($data->usar_ia ?? 0) === 1;
-        if (!$usarIa) {
-            echo json_encode([
-                "ok"              => true,
-                "layout"          => $layout,
-                "campos"          => $base,
-                "periodos_matriz" => $periodosMotor,
-                "somente_lacunas" => true,
-                "aviso"           => "Completado pelo motor de cabeçalhos, sem IA.",
-            ], JSON_UNESCAPED_UNICODE);
-            return;
-        }
-
         $linhasColunas = [];
         foreach ($headers as $i => $h) {
             $letra = $svc->letra((int) $i);
@@ -980,7 +980,14 @@ PROMPT;
                 "somente_lacunas" => true,
             ], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
-            echo json_encode(["ok" => false, "error" => $e->getMessage()]);
+            echo json_encode([
+                "ok"              => true,
+                "layout"          => $layout,
+                "campos"          => $base,
+                "periodos_matriz" => $periodosMotor,
+                "somente_lacunas" => true,
+                "aviso"           => "IA indisponível; preenchi só pelo nome das colunas.",
+            ], JSON_UNESCAPED_UNICODE);
         }
     }
 
