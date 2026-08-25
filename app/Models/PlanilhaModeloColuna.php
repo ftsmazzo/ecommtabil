@@ -82,7 +82,6 @@ class PlanilhaModeloColuna extends Model
                 "helper"                  => $helper,
                 "campo_dre"               => $destino,
                 "trash"                   => 0,
-                "created_by"              => $idUsuario ?: null,
             ]);
         }
     }
