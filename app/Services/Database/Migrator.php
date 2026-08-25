@@ -49,6 +49,37 @@ class Migrator
             $stmt->execute([$nome]);
             fwrite(STDOUT, "[migrate] concluída {$nome}\n");
         }
+
+        $this->limparImportacaoUmaVez();
+    }
+
+    /**
+     * Zera lançamentos e de-paras de teste. Roda uma vez por banco.
+     */
+    public function limparTabelasImportacao(): void
+    {
+        $this->pdo->exec("SET FOREIGN_KEY_CHECKS = 0");
+        foreach (["projeto_lancamento", "projeto_mapeamento_coluna", "projeto_origem_perfil"] as $tabela) {
+            if (!$this->tabelaExiste($tabela)) {
+                continue;
+            }
+            $this->pdo->exec("TRUNCATE TABLE `{$tabela}`");
+            fwrite(STDOUT, "[migrate] limpou {$tabela}\n");
+        }
+        $this->pdo->exec("SET FOREIGN_KEY_CHECKS = 1");
+    }
+
+    private function limparImportacaoUmaVez(): void
+    {
+        $chave = "__reset_importacao_v1";
+        $aplicados = $this->aplicados();
+        if (isset($aplicados[$chave])) {
+            return;
+        }
+        $this->limparTabelasImportacao();
+        $stmt = $this->pdo->prepare("INSERT INTO `schema_migrations` (`filename`) VALUES (?)");
+        $stmt->execute([$chave]);
+        fwrite(STDOUT, "[migrate] reset de importação registrado ({$chave})\n");
     }
 
     /**

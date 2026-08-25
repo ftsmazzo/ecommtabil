@@ -140,6 +140,7 @@ $router->namespace("\App\Controllers\Admin")->group(null);
     $router->get("/projetos/delete/{id}", "ProjetoController:delete", "admin.projeto.delete");
     $router->get("/projetos/{id}", "ProjetoController:open", "admin.projeto.abrir");
     $router->get("/projetos/{id}/importacao", "ProjetoController:importacao", "admin.projeto.importacao");
+    $router->post("/projetos/{id}/importacao/limpar", "ProjetoController:limparImportacao", "admin.projeto.importacao.limpar");
     $router->post("/projetos/{id}/importacao/upload", "ProjetoController:uploadPlanilha", "admin.projeto.importacao.upload");
     $router->get("/projetos/{id}/importacao/mapear", "ProjetoController:mapeamento", "admin.projeto.importacao.mapear");
     $router->post("/projetos/{id}/importacao/mapear/preview", "ProjetoController:mapeamentoPreview", "admin.projeto.importacao.mapear.preview");

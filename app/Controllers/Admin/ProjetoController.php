@@ -2,6 +2,7 @@
 
 namespace App\Controllers\Admin;
 
+use App\Core\Connection;
 use App\Core\ControllerAdmin;
 use App\Core\Data;
 use App\Core\Redirect;
@@ -15,6 +16,7 @@ use App\Models\Projeto;
 use App\Models\ProjetoLancamento;
 use App\Models\ProjetoMapeamentoColuna;
 use App\Models\UsuarioProjetoRecente;
+use App\Services\Database\Migrator;
 use App\Services\Importacao\DeParaMapper;
 use App\Services\Importacao\OrigemClassificador;
 use App\Services\Importacao\OrigemPerfilService;
@@ -302,6 +304,24 @@ class ProjetoController extends ControllerAdmin
                 "excluir" => $this->auth->allow("projeto_excluir"),
             ],
         ]);
+    }
+
+    public function limparImportacao(Request $request): void
+    {
+        $this->authorize("projeto_gerenciar");
+
+        $data    = new Data($request->all());
+        $projeto = Projeto::find((int) ($data->id ?? 0));
+        if (!$projeto) {
+            $this->message->warning("Projeto não encontrado");
+            $this->router->redirect("admin.projeto.index");
+            return;
+        }
+
+        (new Migrator(Connection::get(), PATH_ROOT . "/storage/migrations"))->limparTabelasImportacao();
+        $this->session->unset("planilha_upload");
+        $this->message->success("Lançamentos, mapeamentos e perfis de origem de teste foram apagados. Envie o arquivo de novo.");
+        $this->router->redirect("admin.projeto.importacao", ["id" => $projeto->id]);
     }
 
     public function uploadPlanilha(Request $request): void

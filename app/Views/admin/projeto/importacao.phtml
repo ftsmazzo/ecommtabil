@@ -6,6 +6,13 @@
             <i class="uil uil-edit-alt"></i> Editar
         </button>
     <?php endif ?>
+    <form action="<?=$router->route("admin.projeto.importacao.limpar", ["id" => $projeto->id])?>" method="POST" class="d-inline"
+          onsubmit="return confirm('Apagar lançamentos, de-paras e perfis de origem de teste? Clientes e projetos permanecem.');">
+        <input type="hidden" name="csrf" value="<?=$csrf?>">
+        <button type="submit" class="btn btn-outline-danger btn-sm">
+            <i class="uil uil-trash-alt"></i> Limpar dados de importação
+        </button>
+    </form>
 <?php $this->end() ?>
 
 <?php $this->start("styles") ?>
