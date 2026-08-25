@@ -685,20 +685,12 @@ class ProjetoController extends ControllerAdmin
 
         $this->atualizarUploadSessao($upload, ["conta_padrao" => $contaPadrao]);
 
-        $resultado = $this->executarProcessamento(
-            $svc,
-            $caminho,
-            $aba,
-            $mapa,
-            (int) $projeto->id,
-            (string) $tipo,
-            $contaPadrao
-        );
-        if ($resultado === null) {
-            return;
-        }
-
-        $this->router->redirect("admin.projeto.abrir", ["id" => $projeto->id]);
+        $this->message->success("Mapeamento salvo. Confira o que entra e, se estiver certo, processe os dados.");
+        $this->router->redirect("admin.projeto.importacao.mapear", [
+            "id"    => $projeto->id,
+            "aba"   => $aba,
+            "salvo" => 1,
+        ]);
     }
 
     public function processarDados(Request $request): void
@@ -1060,7 +1052,7 @@ PROMPT;
         }
 
         if ($resultado["inseridos"] === 0) {
-            $this->message->warning("Mapeamento salvo, mas nenhum lançamento foi gerado. Revise as colunas de data e valor.");
+            $this->message->warning("Nenhum lançamento foi gerado. Revise o mapeamento, os nomes das contas e o formato dos valores.");
             foreach ($resultado["avisos"] as $aviso) {
                 $this->message->warning($aviso);
             }

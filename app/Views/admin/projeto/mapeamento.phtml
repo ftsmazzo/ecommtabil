@@ -162,7 +162,7 @@ $renderLinhaModelo = function (array $campo) use ($renderSelect, $campos): void 
 <?php if ($origem === "salvo") : ?>
 <div class="alert alert-success py-2 mb-3">
     <i class="uil uil-check-circle me-1"></i>
-    Mapeamento desta planilha está salvo. Confira e clique em <strong>Salvar e importar</strong> para gravar os lançamentos.
+    Mapeamento salvo. Use <strong>Conferir o que entra</strong> para validar e só então <strong>Processar dados</strong>.
 </div>
 <?php elseif ($origem === "perfil") : ?>
 <div class="alert alert-success py-2 mb-3">
@@ -176,7 +176,7 @@ $renderLinhaModelo = function (array $campo) use ($renderSelect, $campos): void 
     <?php if (!empty($familiaOrigem) && $familiaOrigem !== "desconhecida") : ?>
         (família <strong><?=htmlspecialchars((string) $familiaOrigem, ENT_QUOTES, "UTF-8")?></strong>)
     <?php endif ?>.
-    Colunas que o modelo não usa ficam de fora. Confira e clique em <strong>Salvar e importar</strong>.
+    Colunas que o modelo não usa ficam de fora. Confira e <strong>salve</strong> o mapeamento.
 </div>
 <?php endif ?>
 
@@ -301,14 +301,17 @@ $renderLinhaModelo = function (array $campo) use ($renderSelect, $campos): void 
 <div class="card">
     <div class="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
         <span class="text-muted small" id="map-resumo">
-            Confira o de-para e importe. Os lançamentos vão para a visão geral do projeto.
+            <?php if ($qtdSalvos > 0) : ?>
+                <i class="uil uil-check-circle text-success me-1"></i>Mapeamento salvo. Confira o que entra e processe.
+            <?php else : ?>
+                Salve o de-para para conferir o que entra e processar.
+            <?php endif ?>
         </span>
         <div class="d-flex gap-2 flex-wrap">
             <a href="<?=$router->route("admin.projeto.importacao", ["id" => $projeto->id, "tipo" => $upload->tipo])?>"
                class="btn btn-outline-secondary">Cancelar</a>
-            <button type="submit" form="form-mapeamento" class="btn btn-success" id="btn-salvar-mapear">
-                <span class="btn-text"><i class="uil uil-import me-1"></i>Salvar e importar</span>
-                <span class="btn-loading d-none"><span class="spinner-border spinner-border-sm me-2"></span>Importando...</span>
+            <button type="submit" form="form-mapeamento" class="btn btn-primary" id="btn-salvar-mapear">
+                <i class="uil uil-check me-1"></i>Salvar mapeamento
             </button>
             <?php if ($qtdSalvos > 0) : ?>
             <button type="button" class="btn btn-outline-success" id="btn-simular">
@@ -380,6 +383,14 @@ $renderLinhaModelo = function (array $campo) use ($renderSelect, $campos): void 
                     </div>
                 </div>
             </div>
+            <?php if ($qtdSalvos > 0) : ?>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Ajustar mapeamento</button>
+                <button type="submit" form="form-processar" class="btn btn-success">
+                    <i class="uil uil-process me-1"></i>Está certo, processar dados
+                </button>
+            </div>
+            <?php endif ?>
         </div>
     </div>
 </div>
@@ -503,18 +514,6 @@ $renderLinhaModelo = function (array $campo) use ($renderSelect, $campos): void 
         });
     }
 
-    var formMap = document.getElementById("form-mapeamento");
-    var btnSalvar = document.getElementById("btn-salvar-mapear");
-    if (formMap && btnSalvar) {
-        formMap.addEventListener("submit", function () {
-            btnSalvar.disabled = true;
-            var t = btnSalvar.querySelector(".btn-text");
-            var l = btnSalvar.querySelector(".btn-loading");
-            if (t) t.classList.add("d-none");
-            if (l) l.classList.remove("d-none");
-        });
-    }
-
     var btnIa = document.getElementById("btn-ia-sugerir");
     if (btnIa) {
         btnIa.addEventListener("click", function () {
@@ -603,64 +602,69 @@ $renderLinhaModelo = function (array $campo) use ($renderSelect, $campos): void 
     }
 
     var btnSimular = document.getElementById("btn-simular");
-    if (btnSimular) {
-        btnSimular.addEventListener("click", function () {
-            var modalEl = document.getElementById("modal-simular");
-            var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-            document.getElementById("simular-loading").classList.remove("d-none");
-            document.getElementById("simular-erro").classList.add("d-none");
-            document.getElementById("simular-ok").classList.add("d-none");
-            modal.show();
+    function abrirSimulacao() {
+        if (!btnSimular) return;
+        var modalEl = document.getElementById("modal-simular");
+        var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        document.getElementById("simular-loading").classList.remove("d-none");
+        document.getElementById("simular-erro").classList.add("d-none");
+        document.getElementById("simular-ok").classList.add("d-none");
+        modal.show();
 
-            fetch(simularUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: "csrf=<?=$csrf?>&aba=" + abaAtiva,
-            })
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-                document.getElementById("simular-loading").classList.add("d-none");
-                if (!data.ok) {
-                    document.getElementById("simular-erro").textContent = data.error || "Falha na simulação.";
-                    document.getElementById("simular-erro").classList.remove("d-none");
-                    return;
-                }
-                var orig = data.linhas_origem || data.inseridos;
-                document.getElementById("simular-resumo").textContent =
-                    orig + " linha(s) da planilha → " + data.inseridos + " lançamento(s).";
-
-                var avisos = document.getElementById("simular-avisos");
-                avisos.innerHTML = "";
-                (data.avisos || []).forEach(function (aviso) {
-                    var d = document.createElement("div");
-                    d.className = "alert alert-warning py-2 small";
-                    d.textContent = aviso;
-                    avisos.appendChild(d);
-                });
-
-                var tb = document.getElementById("simular-tbody");
-                tb.innerHTML = "";
-                (data.amostras || []).forEach(function (a) {
-                    var tr = document.createElement("tr");
-                    var valorNum = Number(a.valor || 0);
-                    var valor = valorNum.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                    if (valorNum < 0) tr.classList.add("text-danger");
-                    tr.innerHTML = "<td></td><td></td><td></td><td></td><td class=\"text-end\"></td>";
-                    tr.cells[0].textContent = a.linha;
-                    tr.cells[1].textContent = a.origem || "—";
-                    tr.cells[2].textContent = a.conta || "";
-                    tr.cells[3].textContent = a.periodo || "—";
-                    tr.cells[4].textContent = valor;
-                    tb.appendChild(tr);
-                });
-                document.getElementById("simular-ok").classList.remove("d-none");
-            })
-            .catch(function () {
-                document.getElementById("simular-loading").classList.add("d-none");
-                document.getElementById("simular-erro").textContent = "Erro de conexão.";
+        fetch(simularUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: "csrf=<?=$csrf?>&aba=" + abaAtiva,
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            document.getElementById("simular-loading").classList.add("d-none");
+            if (!data.ok) {
+                document.getElementById("simular-erro").textContent = data.error || "Falha na simulação.";
                 document.getElementById("simular-erro").classList.remove("d-none");
+                return;
+            }
+            var orig = data.linhas_origem || data.inseridos;
+            document.getElementById("simular-resumo").textContent =
+                orig + " linha(s) da planilha → " + data.inseridos + " lançamento(s).";
+
+            var avisos = document.getElementById("simular-avisos");
+            avisos.innerHTML = "";
+            (data.avisos || []).forEach(function (aviso) {
+                var d = document.createElement("div");
+                d.className = "alert alert-warning py-2 small";
+                d.textContent = aviso;
+                avisos.appendChild(d);
             });
+
+            var tb = document.getElementById("simular-tbody");
+            tb.innerHTML = "";
+            (data.amostras || []).forEach(function (a) {
+                var tr = document.createElement("tr");
+                var valorNum = Number(a.valor || 0);
+                var valor = valorNum.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                if (valorNum < 0) tr.classList.add("text-danger");
+                tr.innerHTML = "<td></td><td></td><td></td><td></td><td class=\"text-end\"></td>";
+                tr.cells[0].textContent = a.linha;
+                tr.cells[1].textContent = a.origem || "—";
+                tr.cells[2].textContent = a.conta || "";
+                tr.cells[3].textContent = a.periodo || "—";
+                tr.cells[4].textContent = valor;
+                tb.appendChild(tr);
+            });
+            document.getElementById("simular-ok").classList.remove("d-none");
+        })
+        .catch(function () {
+            document.getElementById("simular-loading").classList.add("d-none");
+            document.getElementById("simular-erro").textContent = "Erro de conexão.";
+            document.getElementById("simular-erro").classList.remove("d-none");
         });
+    }
+    if (btnSimular) {
+        btnSimular.addEventListener("click", abrirSimulacao);
+        if (new URLSearchParams(window.location.search).get("salvo") === "1") {
+            abrirSimulacao();
+        }
     }
 })();
 </script>
