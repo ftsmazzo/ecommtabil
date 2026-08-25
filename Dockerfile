@@ -35,8 +35,9 @@ COPY . .
 
 RUN mkdir -p storage/cache storage/sessions storage/logs storage/tmp storage/media \
     && chown -R www-data:www-data storage \
-    && chmod -R 775 storage
+    && chmod -R 775 storage \
+    && chmod +x docker-entrypoint.sh
 
 EXPOSE 80
 
-CMD ["apache2-foreground"]
+ENTRYPOINT ["./docker-entrypoint.sh"]

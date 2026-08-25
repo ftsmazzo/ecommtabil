@@ -25,7 +25,9 @@ Um layout novo cai em `desconhecida` e ainda pode ser importado. Depois que o us
 
 ## Pacote para o ambiente real (FTP)
 
-Incluir código + `storage/migrations/0.1.5.sql`. Nada nesta feature assume path de EasyPanel ou VPS.
+Na implantação (Docker/EasyPanel) o `docker-entrypoint.sh` roda `scripts/php/migrate.php` **antes** do Apache. Arquivos novos em `storage/migrations/` (ex.: `0.1.5.sql`) entram sozinhos. Não é necessário SSH na VPS.
+
+Bancos já existentes marcam `0.1.1`–`0.1.4` como baseline e só aplicam o que faltar.
 
 ## O que não fazer
 
