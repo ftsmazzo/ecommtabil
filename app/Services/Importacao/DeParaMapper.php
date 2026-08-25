@@ -66,51 +66,68 @@ class DeParaMapper
      */
     public function atribuirDoModelo(array $headers, array $norm, array $previews, array $contas): array
     {
+        $classes = [];
+        foreach ($headers as $i => $h) {
+            $i = (int) $i;
+            $n = $this->chaveCabecalho((string) ($norm[$i] ?? $h));
+            $amostras = array_values(array_filter(array_map("strval", (array) ($previews[$i] ?? []))));
+            $classes[$i] = [
+                "n"        => $n,
+                "tipo"     => $this->classificarColuna($n, $amostras),
+                "amostras" => $amostras,
+            ];
+        }
+
         $alvos = [];
         $alvos[] = [
-            "dest" => PlanilhaImportacaoService::DEST_PERIODO,
-            "tipo" => "data",
-            "quer" => ["data", "date", "fecha", "periodo", "competencia", "venda", "criacao", "pagamento"],
-            "nao"  => ["prazo", "envio", "conclusao", "status"],
+            "dest"  => PlanilhaImportacaoService::DEST_PERIODO,
+            "tipo"  => "data",
+            "nomes" => ["data", "datavenda", "datadavenda", "fecha", "fechaventa", "fechadeventa", "periodo", "competencia", "datadecriacao", "datapagamento"],
         ];
         $alvos[] = [
-            "dest" => PlanilhaImportacaoService::DEST_DESCRICAO,
-            "tipo" => "texto",
-            "quer" => ["produto", "item", "titulo", "anuncio", "publicacion", "nome", "descri"],
-            "nao"  => ["receita", "valor", "preco", "taxa", "custo", "sku", "id"],
+            "dest"  => PlanilhaImportacaoService::DEST_DESCRICAO,
+            "tipo"  => "texto",
+            "nomes" => ["titulo", "titulodelapublicacion", "titulodoanuncio", "publicacion", "anuncio", "nomedoitem", "nomedoproduto", "nomeproduto"],
         ];
         $alvos[] = [
-            "dest" => PlanilhaImportacaoService::DEST_UNIDADE,
-            "tipo" => "texto",
-            "quer" => ["marketplace", "canaldevenda", "canal", "loja", "empresa"],
-            "nao"  => ["id", "sku", "valor", "host", "seller", "vendedor", "pack"],
+            "dest"  => PlanilhaImportacaoService::DEST_UNIDADE,
+            "tipo"  => "texto",
+            "nomes" => ["marketplace", "canaldevendas", "canaldevenda", "empresa", "loja"],
         ];
 
         foreach ($contas as $conta) {
-            $conceito = $this->conceitoDaConta((string) $conta->nome);
+            $nome = trim((string) $conta->nome);
+            $conceito = $this->conceitoDaConta($nome);
             if ($conceito === null) {
-                $conceito = [
-                    "tipo" => "dinheiro",
-                    "quer" => array_filter(explode(" ", $this->normalizar((string) $conta->nome))),
-                    "nao"  => [],
-                ];
+                continue;
             }
             $alvos[] = [
-                "dest" => "conta_" . (int) $conta->id,
-                "tipo" => $conceito["tipo"],
-                "quer" => $conceito["quer"],
-                "nao"  => $conceito["nao"],
+                "dest"  => "conta_" . (int) $conta->id,
+                "tipo"  => "dinheiro",
+                "nomes" => array_values(array_unique(array_merge(
+                    [$this->chaveCabecalho($nome)],
+                    $conceito["quer"]
+                ))),
             ];
         }
 
         $pares = [];
         foreach ($alvos as $alvo) {
-            foreach ($headers as $i => $h) {
-                $i = (int) $i;
-                $n = (string) ($norm[$i] ?? $this->normalizar((string) $h));
-                $amostras = array_values(array_filter(array_map("strval", (array) ($previews[$i] ?? []))));
-                $nota = $this->notaConceito($alvo, $n, $amostras);
-                if ($nota >= 28) {
+            foreach ($classes as $i => $col) {
+                if ($col["tipo"] === "ignorar") {
+                    continue;
+                }
+                if ($alvo["tipo"] === "dinheiro" && $col["tipo"] !== "dinheiro") {
+                    continue;
+                }
+                if ($alvo["tipo"] === "data" && $col["tipo"] !== "data" && $col["tipo"] !== "vazio") {
+                    continue;
+                }
+                if ($alvo["tipo"] === "texto" && $col["tipo"] === "dinheiro") {
+                    continue;
+                }
+                $nota = $this->notaPorNome($alvo["nomes"], $col["n"], $alvo["tipo"], $col["tipo"]);
+                if ($nota >= 72) {
                     $pares[] = ["dest" => $alvo["dest"], "col" => $i, "nota" => $nota];
                 }
             }
@@ -129,6 +146,70 @@ class DeParaMapper
         return $campos;
     }
 
+    public function chaveCabecalho(string $texto): string
+    {
+        $n = $this->normalizar($texto);
+        $n = preg_replace("/(en)?(brl|usd|ars|mxn|cop|eur|rs)$/", "", $n) ?? $n;
+        return (string) $n;
+    }
+
+    /**
+     * @param array<int,string> $amostras
+     */
+    public function classificarColuna(string $n, array $amostras): string
+    {
+        foreach (["sku", "nvenda", "nodevenda", "ndevenda", "numerodevenda", "numerovenda", "id", "pack", "kit", "cidade", "estado", "pais", "uf", "cep", "cpf", "cnpj", "telefone"] as $lixo) {
+            if ($n === $lixo || str_starts_with($n, $lixo) || str_ends_with($n, $lixo)) {
+                return "ignorar";
+            }
+        }
+        if (str_contains($n, "pertence") || str_contains($n, "host") || $n === "status") {
+            return "ignorar";
+        }
+        $tipo = $this->tipoAmostras($amostras);
+        if ($this->notaPeriodo($n) >= 80 || $tipo === "data") {
+            return "data";
+        }
+        if ($tipo === "numero") {
+            return "dinheiro";
+        }
+        if ($tipo === "vazio") {
+            return "vazio";
+        }
+        return "texto";
+    }
+
+    /**
+     * @param array<int,string> $nomesModelo
+     */
+    public function notaPorNome(array $nomesModelo, string $cabecalho, string $tipoAlvo, string $tipoCol): int
+    {
+        if ($cabecalho === "") {
+            return 0;
+        }
+        $melhor = 0;
+        foreach ($nomesModelo as $nome) {
+            $nome = $this->chaveCabecalho((string) $nome);
+            if ($nome === "" || strlen($nome) < 4) {
+                continue;
+            }
+            if ($cabecalho === $nome || str_starts_with($cabecalho, $nome) || str_starts_with($nome, $cabecalho)) {
+                $melhor = max($melhor, 100);
+                continue;
+            }
+            if (strlen($nome) >= 8 && str_contains($cabecalho, $nome)) {
+                $melhor = max($melhor, 92);
+                continue;
+            }
+            similar_text($cabecalho, $nome, $pct);
+            $melhor = max($melhor, (int) round($pct));
+        }
+        if ($tipoAlvo === $tipoCol) {
+            $melhor += 8;
+        }
+        return $melhor;
+    }
+
     /**
      * @return array{tipo:string,quer:array<int,string>,nao:array<int,string>}|null
      */
@@ -138,48 +219,48 @@ class DeParaMapper
         $conceitos = [
             "receitabruta" => [
                 "tipo" => "dinheiro",
-                "quer" => ["receita", "ingreso", "faturamento", "valordoproduto", "totaldoproduto", "precoacordado", "precodoitem", "subtotal", "vendas"],
-                "nao"  => ["taxa", "comiss", "tarifa", "frete", "envio", "cupom", "desconto", "custo", "costo", "reembolso"],
+                "quer" => ["receitabruta", "receitaporproduto", "ingresosporproducto", "ingresosporproductos", "valortotaldoproduto", "precoacordado"],
+                "nao"  => [],
             ],
             "receitaporenvio" => [
                 "tipo" => "dinheiro",
-                "quer" => ["receitaporenvio", "ingresoporenvio", "fretecomprador", "enviopagopelocomprador"],
-                "nao"  => ["vendedor", "estimativa", "custo", "tarifa"],
+                "quer" => ["receitaporenvio", "ingresoporenvio", "ingresosporenvio", "fretecomprador"],
+                "nao"  => [],
             ],
             "cmv" => [
                 "tipo" => "dinheiro",
-                "quer" => ["cmv", "custo", "costo", "cost"],
-                "nao"  => ["envio", "frete", "tarifa", "taxa", "comiss"],
+                "quer" => ["cmv", "preciodecost", "preciodecosto", "precodecusto", "custodoproduto"],
+                "nao"  => [],
             ],
             "tarifadevendaeimpostos" => [
                 "tipo" => "dinheiro",
-                "quer" => ["tarifa", "taxadeservico", "taxadetransacao", "taxadecomissao", "cargo", "fee"],
-                "nao"  => ["afiliad", "envio", "frete", "cupom", "produto"],
+                "quer" => ["tarifadevendaeimpostos", "tarifadevenda", "tarifadeventa", "cargoporserviciodeventa", "taxadecomissao", "taxadeservico", "taxadetransacao"],
+                "nao"  => [],
             ],
             "cuponsedescontos" => [
                 "tipo" => "dinheiro",
-                "quer" => ["cupom", "desconto", "descuento", "reembolso", "cancelamento"],
-                "nao"  => ["taxa", "comiss", "frete"],
+                "quer" => ["cuponsedescontos", "cupom", "descuentos", "cancelamentosereembolsos"],
+                "nao"  => [],
             ],
             "tarifasdeenvio" => [
                 "tipo" => "dinheiro",
-                "quer" => ["tarifasdeenvio", "frete", "envio", "shipping"],
-                "nao"  => ["comprador", "receita", "ingreso", "produto"],
+                "quer" => ["tarifasdeenvio", "tarifadeenvio"],
+                "nao"  => [],
             ],
             "comissaodeafiliados" => [
                 "tipo" => "dinheiro",
-                "quer" => ["afiliad"],
+                "quer" => ["comissaodeafiliados", "comissaoafiliado", "valorafiliado"],
                 "nao"  => [],
             ],
             "freteentregadireta" => [
                 "tipo" => "dinheiro",
-                "quer" => ["entregadireta", "direct"],
+                "quer" => ["freteentregadireta"],
                 "nao"  => [],
             ],
             "deducoes" => [
                 "tipo" => "dinheiro",
-                "quer" => ["deduc"],
-                "nao"  => ["tarifa", "taxa"],
+                "quer" => ["deducoes"],
+                "nao"  => [],
             ],
         ];
         return $conceitos[$n] ?? null;

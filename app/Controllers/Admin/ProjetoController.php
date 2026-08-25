@@ -890,21 +890,25 @@ class ProjetoController extends ControllerAdmin
         $usadas = array_flip(array_map("intval", array_values($base)));
         foreach ($headers as $i => $h) {
             $i = (int) $i;
-            $lock = isset($usadas[$i]) ? " [já usada pelo motor]" : "";
-            $ex = !empty($previews[$i]) ? implode(" | ", array_slice($previews[$i], 0, 3)) : "(sem amostra)";
-            $colunasLinhas[] = "[{$i}] " . $svc->letra($i) . " cabeçalho=\"" . trim((string) $h) . "\" amostras=" . $ex . $lock;
+            $n = $mapper->chaveCabecalho((string) $h);
+            $exArr = array_values(array_filter(array_map("strval", (array) ($previews[$i] ?? []))));
+            $tipoCol = $mapper->classificarColuna($n, $exArr);
+            $lock = isset($usadas[$i]) ? " [já usada]" : "";
+            $ex = $exArr !== [] ? implode(" | ", array_slice($exArr, 0, 3)) : "(sem amostra)";
+            $colunasLinhas[] = "[{$i}] tipo={$tipoCol} cabeçalho=\"" . trim((string) $h) . "\" amostras=" . $ex . $lock;
         }
 
         $systemPrompt = <<<PROMPT
-Você faz de-para. A BASE é o MODELO (o que o demonstrativo precisa). O arquivo pode ser qualquer planilha.
-Tarefa: para cada campo do modelo marcado VAZIO, escolha o índice da coluna cujas amostras e cabeçalho melhor representam AQUELE CONCEITO. O nome da coluna não precisa ser igual ao do modelo.
+Você completa só o que o motor deixou VAZIO. A BASE é o modelo.
+Responda SOMENTE JSON: {"campos": {"__periodo__": 0, "conta_12": 3}}
 Regras:
-- Responda SOMENTE JSON: {"campos": {"__periodo__": 0, "conta_12": 3}}
-- Um índice de coluna só pode ir para um campo.
-- Campos já preenchidos: não altere.
-- Ignore identificação (id, status, sku, cpf, quantidade) se as amostras não forem o conceito do campo.
-- Data: amostras com data. Dinheiro: amostras numéricas. Descrição: texto de produto, nunca valor.
-- Não omita um campo VAZIO se houver coluna óbvia (ex.: números + ideia de venda/produto → Receita Bruta; números + taxa/comissão → tarifa).
+- Não altere campo já preenchido.
+- Uma coluna, um campo.
+- tipo=ignorar: nunca use (id, sku, cidade, estado, país, kit, host).
+- tipo=texto: só descrição/unidade, nunca conta de dinheiro.
+- tipo=dinheiro: só conta de dinheiro. Prefira o campo cujo NOME mais se parece com o cabeçalho (ex. "Receita por envio (BRL)" → Receita por envio, NÃO CMV).
+- tipo=data: só __periodo__.
+- Se não houver coluna parecida, omita. Não invente.
 PROMPT;
 
         $prompt  = "Demonstrativo: " . strtoupper((string) $upload->tipo) . "\n\n";
