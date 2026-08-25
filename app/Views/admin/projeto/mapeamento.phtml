@@ -366,14 +366,14 @@ $renderLinhaModelo = function (array $campo) use ($renderSelect, $campos): void 
                 <div id="simular-ok" class="d-none">
                     <p class="mb-2" id="simular-resumo"></p>
                     <div id="simular-avisos"></div>
-                    <p class="small text-muted mb-3">Uma linha do Excel vira vários lançamentos: um por conta mapeada. Valor negativo veio do arquivo.</p>
+                    <p class="small text-muted mb-3">Uma linha do Excel vira vários <strong>lançamentos</strong> nas contas que já existem no plano. O nome da coluna do cliente não vira conta nova — Mercado Livre, Shopee e planilha interna podem chamar “Receita por produtos”, “Vr. Venda” ou “Ingresos”; no sistema continua <strong>Receita Bruta</strong>.</p>
                     <div class="table-responsive">
                         <table class="table table-sm mb-0">
                             <thead class="table-light">
                                 <tr>
                                     <th>Linha do Excel</th>
-                                    <th>Coluna da planilha</th>
-                                    <th>Conta no plano</th>
+                                    <th>De onde veio (arquivo)</th>
+                                    <th>Vai para (plano)</th>
                                     <th>Data</th>
                                     <th class="text-end">Valor</th>
                                 </tr>

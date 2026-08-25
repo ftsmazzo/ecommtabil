@@ -434,7 +434,6 @@ class ProjetoController extends ControllerAdmin
             $colunas = $svc->rotulosColunas($headers, $previews);
             $linhaCabecalho = (int) ($lido["linhaCabecalho"] ?? 1);
 
-            DreConta::garantirPlanoSagaPadrao((string) $upload->tipo, (int) ($this->user->uid ?? 0));
             $contasGrupos = DreConta::analiticasPorTipo($upload->tipo);
             $contasLista  = DreConta::analiticasLista($upload->tipo);
             $dePara       = $svc->camposDePara((string) $upload->tipo, $contasGrupos);
@@ -700,7 +699,6 @@ class ProjetoController extends ControllerAdmin
             $headers,
             strtolower((string) pathinfo((string) ($upload->arquivo ?? ""), PATHINFO_EXTENSION))
         );
-        DreConta::garantirPlanoSagaPadrao((string) $tipo, (int) ($this->user->uid ?? 0));
         (new OrigemPerfilService())->gravar(
             $classificador->fingerprint($headers),
             (string) $tipo,
@@ -867,7 +865,6 @@ class ProjetoController extends ControllerAdmin
             $layout = $svc->detectarLayout($headers);
         }
 
-        DreConta::garantirPlanoSagaPadrao((string) $upload->tipo, (int) ($this->user->uid ?? 0));
         $contas = DreConta::analiticasLista($upload->tipo);
         $mapper = new DeParaMapper();
 
