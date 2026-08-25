@@ -830,6 +830,9 @@ class PlanilhaImportacaoService
         if ($valor == 0.0) {
             return null;
         }
+        if (abs($valor) >= 100000000000) {
+            return null;
+        }
 
         return round($valor, 2);
     }

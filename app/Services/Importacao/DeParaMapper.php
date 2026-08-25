@@ -70,7 +70,7 @@ class DeParaMapper
         $alvos[] = [
             "dest" => PlanilhaImportacaoService::DEST_PERIODO,
             "tipo" => "data",
-            "quer" => ["data", "date", "fecha", "periodo", "competencia", "venda", "pedido"],
+            "quer" => ["data", "date", "fecha", "periodo", "competencia", "venda", "criacao", "pagamento"],
             "nao"  => ["prazo", "envio", "conclusao", "status"],
         ];
         $alvos[] = [
@@ -82,8 +82,8 @@ class DeParaMapper
         $alvos[] = [
             "dest" => PlanilhaImportacaoService::DEST_UNIDADE,
             "tipo" => "texto",
-            "quer" => ["marketplace", "canal", "loja", "empresa", "unidade", "seller"],
-            "nao"  => ["id", "sku", "valor"],
+            "quer" => ["marketplace", "canaldevenda", "canal", "loja", "empresa"],
+            "nao"  => ["id", "sku", "valor", "host", "seller", "vendedor", "pack"],
         ];
 
         foreach ($contas as $conta) {
@@ -110,7 +110,7 @@ class DeParaMapper
                 $n = (string) ($norm[$i] ?? $this->normalizar((string) $h));
                 $amostras = array_values(array_filter(array_map("strval", (array) ($previews[$i] ?? []))));
                 $nota = $this->notaConceito($alvo, $n, $amostras);
-                if ($nota >= 18) {
+                if ($nota >= 28) {
                     $pares[] = ["dest" => $alvo["dest"], "col" => $i, "nota" => $nota];
                 }
             }
@@ -138,7 +138,7 @@ class DeParaMapper
         $conceitos = [
             "receitabruta" => [
                 "tipo" => "dinheiro",
-                "quer" => ["receita", "ingreso", "faturamento", "valordoproduto", "totaldoproduto", "precoacordado", "subtotal", "vendas"],
+                "quer" => ["receita", "ingreso", "faturamento", "valordoproduto", "totaldoproduto", "precoacordado", "precodoitem", "subtotal", "vendas"],
                 "nao"  => ["taxa", "comiss", "tarifa", "frete", "envio", "cupom", "desconto", "custo", "costo", "reembolso"],
             ],
             "receitaporenvio" => [
@@ -153,8 +153,8 @@ class DeParaMapper
             ],
             "tarifadevendaeimpostos" => [
                 "tipo" => "dinheiro",
-                "quer" => ["tarifa", "comiss", "taxa", "cargo", "fee", "imposto"],
-                "nao"  => ["afiliad", "envio", "frete", "cupom"],
+                "quer" => ["tarifa", "taxadeservico", "taxadetransacao", "taxadecomissao", "cargo", "fee"],
+                "nao"  => ["afiliad", "envio", "frete", "cupom", "produto"],
             ],
             "cuponsedescontos" => [
                 "tipo" => "dinheiro",
@@ -194,6 +194,7 @@ class DeParaMapper
         if ($n === "") {
             return 0;
         }
+        $hits = 0;
         $nota = 0;
         foreach ($alvo["quer"] as $tok) {
             $tok = $this->normalizar((string) $tok);
@@ -201,17 +202,24 @@ class DeParaMapper
                 continue;
             }
             if ($n === $tok || str_contains($n, $tok) || (strlen($tok) >= 6 && str_contains($tok, $n))) {
+                $hits++;
                 $nota += 12 + min(8, strlen($tok));
             }
         }
         foreach ($alvo["nao"] as $tok) {
             $tok = $this->normalizar((string) $tok);
             if ($tok !== "" && str_contains($n, $tok)) {
-                $nota -= 28;
+                $nota -= 40;
             }
         }
 
         $tipoAmostra = $this->tipoAmostras($amostras);
+        if ($hits === 0) {
+            if ($alvo["tipo"] === "data" && $tipoAmostra === "data") {
+                return max(0, $this->notaPeriodo($n) + 40);
+            }
+            return 0;
+        }
         if ($alvo["tipo"] === "data") {
             $nota += ($tipoAmostra === "data") ? 40 : ($tipoAmostra === "vazio" ? 0 : -25);
             $nota += $this->notaPeriodo($n);
