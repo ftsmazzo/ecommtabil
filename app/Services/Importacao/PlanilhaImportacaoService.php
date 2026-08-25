@@ -349,18 +349,21 @@ class PlanilhaImportacaoService
         }
 
         $salvo = $perfilSvc->buscar($fingerprint, $tipo, $contas);
+        $mapper = new DeParaMapper();
         if ($salvo && ($salvo["campos"] || $salvo["periodos_matriz"])) {
-            return [
-                "campos"          => $salvo["campos"],
-                "periodos_matriz" => $salvo["periodos_matriz"],
-                "familia"         => $classificado["familia"],
-                "origem"          => "perfil",
-                "fingerprint"     => $fingerprint,
-                "layout"          => $layout,
-            ];
+            if ($mapper->mapaCompativel($salvo["campos"], $headers, $previews)) {
+                return [
+                    "campos"          => $salvo["campos"],
+                    "periodos_matriz" => $salvo["periodos_matriz"],
+                    "familia"         => $classificado["familia"],
+                    "origem"          => "perfil",
+                    "fingerprint"     => $fingerprint,
+                    "layout"          => $layout,
+                ];
+            }
         }
 
-        $motor = (new DeParaMapper())->sugerir($headers, $layout, $contas, $previews);
+        $motor = $mapper->sugerir($headers, $layout, $contas, $previews);
         return [
             "campos"          => $motor["campos"],
             "periodos_matriz" => $motor["periodos_matriz"],

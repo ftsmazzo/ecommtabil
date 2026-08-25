@@ -432,10 +432,17 @@ class ProjetoController extends ControllerAdmin
             );
             $layoutDetectado = $porOrigem["layout"] ?: $svc->detectarLayout($headers);
             $familiaOrigem = $porOrigem["familia"];
+            $mapperTipos = new DeParaMapper();
 
             if ($mapaSalvo) {
                 $expandido = $svc->expandirMapa($mapaSalvo);
-                $origemMapeamento = "salvo";
+                if (!$mapperTipos->mapaCompativel($expandido["campos"] ?? [], $headers, $previews)) {
+                    $mapaSalvo = [];
+                    $expandido = $porOrigem;
+                    $origemMapeamento = $porOrigem["origem"] === "perfil" ? "perfil" : "sugerido";
+                } else {
+                    $origemMapeamento = "salvo";
+                }
             } else {
                 $expandido = $porOrigem;
                 $origemMapeamento = $porOrigem["origem"] === "perfil"
@@ -983,6 +990,12 @@ PROMPT;
                 }
                 $ok = isset($especiais[$destino]) || isset($idsValidos[$destino]);
                 if (!$ok) {
+                    continue;
+                }
+                $nCol = $mapper->chaveCabecalho((string) ($headers[$indice] ?? ""));
+                $amo  = array_values(array_filter(array_map("strval", (array) ($previews[$indice] ?? []))));
+                $tipoCol = $mapper->classificarColuna($nCol, $amo);
+                if (!$mapper->colunaServe($mapper->tipoEsperado($destino), $tipoCol)) {
                     continue;
                 }
                 $campos[$destino] = $indice;

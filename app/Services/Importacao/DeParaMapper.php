@@ -82,20 +82,20 @@ class DeParaMapper
         $alvos[] = [
             "dest"  => PlanilhaImportacaoService::DEST_PERIODO,
             "tipo"  => "data",
-            "nomes" => ["data", "datavenda", "datadavenda", "fecha", "fechaventa", "fechadeventa", "periodo", "competencia", "datadecriacao", "datapagamento"],
-            "nao"   => ["prazodeenvio", "dataenvio", "datadeconclusao"],
+            "nomes" => ["datadavenda", "datavenda", "fechadeventa", "fechaventa", "datadecriacaodopedido", "datapagamentodopedido", "datapagamento"],
+            "nao"   => ["prazo", "envio", "conclusao", "parcelamento"],
         ];
         $alvos[] = [
             "dest"  => PlanilhaImportacaoService::DEST_DESCRICAO,
             "tipo"  => "texto",
-            "nomes" => ["titulo", "titulodelapublicacion", "titulodoanuncio", "publicacion", "anuncio", "nomedoitem", "nomedoproduto", "nomeproduto", "descricao"],
-            "nao"   => ["status", "sku"],
+            "nomes" => ["titulodoanuncio", "titulodelapublicacion", "titulodapublicacion", "nomedoproduto", "nomedoitem", "nomeproduto"],
+            "nao"   => ["status", "sku", "custo", "url", "cidade"],
         ];
         $alvos[] = [
             "dest"  => PlanilhaImportacaoService::DEST_UNIDADE,
             "tipo"  => "texto",
-            "nomes" => ["marketplace", "canaldevendas", "canaldevenda", "empresa", "loja"],
-            "nao"   => [],
+            "nomes" => ["canaldevenda", "canaldevendas", "marketplace"],
+            "nao"   => ["cidade", "pais"],
         ];
 
         foreach ($contas as $conta) {
@@ -118,35 +118,14 @@ class DeParaMapper
         $pares = [];
         foreach ($alvos as $alvo) {
             foreach ($classes as $i => $col) {
-                if ($col["tipo"] === "ignorar") {
+                if (!$this->colunaServe($alvo["tipo"], $col["tipo"])) {
                     continue;
                 }
-                if ($alvo["tipo"] === "dinheiro" && $col["tipo"] !== "dinheiro") {
+                $nota = $this->notaToken($alvo["nomes"], $alvo["nao"] ?? [], $col["n"]);
+                if ($nota < 85) {
                     continue;
                 }
-                if ($alvo["tipo"] === "data" && $col["tipo"] !== "data" && $col["tipo"] !== "vazio") {
-                    continue;
-                }
-                if ($alvo["tipo"] === "texto" && $col["tipo"] === "dinheiro") {
-                    continue;
-                }
-                $notaConceito = $this->notaConceito([
-                    "dest" => $alvo["dest"],
-                    "tipo" => $alvo["tipo"],
-                    "quer" => $alvo["nomes"],
-                    "nao"  => $alvo["nao"] ?? [],
-                ], $col["n"], $col["amostras"]);
-                $notaNome = $this->notaPorNome($alvo["nomes"], $col["n"], $alvo["tipo"], $col["tipo"]);
-                foreach ($alvo["nao"] ?? [] as $neg) {
-                    $neg = $this->chaveCabecalho((string) $neg);
-                    if ($neg !== "" && str_contains($col["n"], $neg)) {
-                        $notaNome -= 50;
-                    }
-                }
-                $nota = max($notaConceito, $notaNome >= 88 ? $notaNome : 0);
-                if ($nota >= 70) {
-                    $pares[] = ["dest" => $alvo["dest"], "col" => $i, "nota" => $nota];
-                }
+                $pares[] = ["dest" => $alvo["dest"], "col" => $i, "nota" => $nota];
             }
         }
 
@@ -163,6 +142,83 @@ class DeParaMapper
         return $campos;
     }
 
+    /**
+     * @param array<string,int> $campos
+     * @param array<int,string> $headers
+     * @param array<int,array<int,string>> $previews
+     */
+    public function mapaCompativel(array $campos, array $headers, array $previews): bool
+    {
+        foreach ($campos as $dest => $indice) {
+            $indice = (int) $indice;
+            $n = $this->chaveCabecalho((string) ($headers[$indice] ?? ""));
+            $amostras = array_values(array_filter(array_map("strval", (array) ($previews[$indice] ?? []))));
+            $tipoCol = $this->classificarColuna($n, $amostras);
+            if (!$this->colunaServe($this->tipoEsperado((string) $dest), $tipoCol)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public function tipoEsperado(string $dest): string
+    {
+        if ($dest === PlanilhaImportacaoService::DEST_PERIODO) {
+            return "data";
+        }
+        if ($dest === PlanilhaImportacaoService::DEST_DESCRICAO || $dest === PlanilhaImportacaoService::DEST_UNIDADE) {
+            return "texto";
+        }
+        return "dinheiro";
+    }
+
+    public function colunaServe(string $esperado, string $tipoCol): bool
+    {
+        if ($tipoCol === "ignorar") {
+            return false;
+        }
+        if ($esperado === "data") {
+            return $tipoCol === "data";
+        }
+        if ($esperado === "dinheiro") {
+            return $tipoCol === "dinheiro";
+        }
+        return $tipoCol === "texto" || $tipoCol === "vazio";
+    }
+
+    /**
+     * @param array<int,string> $quer
+     * @param array<int,string> $nao
+     */
+    public function notaToken(array $quer, array $nao, string $n): int
+    {
+        if ($n === "") {
+            return 0;
+        }
+        foreach ($nao as $neg) {
+            $neg = $this->chaveCabecalho((string) $neg);
+            if ($neg !== "" && strlen($neg) >= 4 && str_contains($n, $neg)) {
+                return 0;
+            }
+        }
+        $melhor = 0;
+        foreach ($quer as $q) {
+            $q = $this->chaveCabecalho((string) $q);
+            if ($q === "" || strlen($q) < 8) {
+                continue;
+            }
+            if ($n === $q) {
+                return 100;
+            }
+            if (str_contains($n, $q)) {
+                $melhor = max($melhor, 96);
+            } elseif (strlen($n) >= 8 && str_contains($q, $n)) {
+                $melhor = max($melhor, 90);
+            }
+        }
+        return $melhor;
+    }
+
     public function chaveCabecalho(string $texto): string
     {
         $n = $this->normalizar($texto);
@@ -175,15 +231,23 @@ class DeParaMapper
      */
     public function classificarColuna(string $n, array $amostras): string
     {
-        foreach (["sku", "nvenda", "nodevenda", "ndevenda", "numerodevenda", "numerovenda", "id", "pack", "kit", "cidade", "estado", "pais", "uf", "cep", "cpf", "cnpj", "telefone"] as $lixo) {
-            if ($n === $lixo || str_starts_with($n, $lixo) || str_ends_with($n, $lixo)) {
+        foreach ([
+            "sku", "nvenda", "nodevenda", "ndevenda", "numerodevenda", "numerovenda", "id", "pack", "kit",
+            "cidade", "estado", "pais", "uf", "cep", "cpf", "cnpj", "telefone",
+            "url", "acompanhamento", "rastreio", "tracking", "nfe", "anexo",
+            "unidades", "quantidade", "variacao",
+        ] as $lixo) {
+            if ($n === $lixo || str_starts_with($n, $lixo) || (strlen($lixo) >= 5 && str_contains($n, $lixo))) {
                 return "ignorar";
             }
         }
-        if (str_contains($n, "pertence") || str_contains($n, "host") || $n === "status") {
+        if (str_contains($n, "pertence") || str_contains($n, "host") || $n === "status" || str_contains($n, "statusdo")) {
             return "ignorar";
         }
         $tipo = $this->tipoAmostras($amostras);
+        if ($tipo === "url") {
+            return "ignorar";
+        }
         if ($this->notaPeriodo($n) >= 80 || $tipo === "data") {
             return "data";
         }
@@ -237,7 +301,7 @@ class DeParaMapper
             "receitabruta" => [
                 "tipo" => "dinheiro",
                 "quer" => ["receitabruta", "receitaporproduto", "ingresosporproducto", "ingresosporproductos", "valortotaldoproduto", "precoacordado", "vrvenda", "valorvenda"],
-                "nao"  => ["envio", "frete", "tarifa", "taxa", "imposto"],
+                "nao"  => ["envio", "frete", "tarifa", "taxa", "imposto", "cancelamento", "reembolso", "acrescimo", "parcelamento"],
             ],
             "receitaporenvio" => [
                 "tipo" => "dinheiro",
@@ -246,23 +310,23 @@ class DeParaMapper
             ],
             "cmv" => [
                 "tipo" => "dinheiro",
-                "quer" => ["cmv", "preciodecost", "preciodecosto", "precodecusto", "custodoproduto", "precodecompra", "custo"],
+                "quer" => ["cmv", "preciodecost", "preciodecosto", "precodecusto", "custodoproduto", "precodecompra", "preciodecompra"],
                 "nao"  => ["envio", "frete", "tarifa", "receita"],
-            ],
-            "tarifadevendaeimpostos" => [
-                "tipo" => "dinheiro",
-                "quer" => ["tarifadevendaeimpostos", "tarifadevenda", "tarifadeventa", "cargoporserviciodeventa", "taxadecomissao", "taxadeservico", "taxadetransacao"],
-                "nao"  => [],
-            ],
-            "cuponsedescontos" => [
-                "tipo" => "dinheiro",
-                "quer" => ["cuponsedescontos", "cupom", "descuentos", "cancelamentosereembolsos"],
-                "nao"  => [],
             ],
             "tarifasdeenvio" => [
                 "tipo" => "dinheiro",
-                "quer" => ["tarifasdeenvio", "tarifadeenvio", "custodeenvio", "costodeenvio", "fretevendedor"],
-                "nao"  => ["receitaporenvio", "pagopelocomprador"],
+                "quer" => ["tarifasdeenvio", "tarifadeenvio"],
+                "nao"  => ["receitaporenvio", "pagopelocomprador", "url", "acompanhamento", "troca"],
+            ],
+            "tarifadevendaeimpostos" => [
+                "tipo" => "dinheiro",
+                "quer" => ["tarifadevendaeimpostos", "tarifadevenda", "tarifadeventa", "cargoporserviciodeventa", "taxadecomissao"],
+                "nao"  => ["parcelamento", "pais", "cidade", "url"],
+            ],
+            "cuponsedescontos" => [
+                "tipo" => "dinheiro",
+                "quer" => ["cuponsedescontos", "cancelamentoseereembolsos", "cancelamentosereembolsos", "descontosbonus", "descontodovendedor"],
+                "nao"  => ["nfe", "anexo", "url"],
             ],
             "comissaodeafiliados" => [
                 "tipo" => "dinheiro",
@@ -345,6 +409,9 @@ class DeParaMapper
                 continue;
             }
             $n++;
+            if (preg_match('#^https?://#i', $a) || str_contains(mb_strtolower($a), "http")) {
+                return "url";
+            }
             if ($this->pareceAmostraData($a)) {
                 $datas++;
                 continue;
