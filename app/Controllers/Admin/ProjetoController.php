@@ -431,25 +431,21 @@ class ProjetoController extends ControllerAdmin
                 $extensao
             );
             $layoutDetectado = $porOrigem["layout"] ?: $svc->detectarLayout($headers);
+            $familiaOrigem = $porOrigem["familia"];
 
             if ($mapaSalvo) {
-                DB::table("projeto_mapeamento_coluna")
-                    ->where("id_projeto", "=", (int) $projeto->id)
-                    ->where("tipo_demonstrativo", "=", (string) $upload->tipo)
-                    ->where("aba", "=", $abaAtiva)
-                    ->delete();
-                $mapaSalvo = [];
+                $expandido = $svc->expandirMapa($mapaSalvo);
+                $origemMapeamento = "salvo";
+            } else {
+                $expandido = $porOrigem;
+                $origemMapeamento = $porOrigem["origem"] === "perfil"
+                    ? "perfil"
+                    : (($expandido["campos"] || ($expandido["periodos_matriz"] ?? [])) ? "sugerido" : "vazio");
             }
-
-            $expandido = $porOrigem;
             if (!isset($expandido["ano_base"])) {
                 $expandido["ano_base"] = (int) date("Y");
             }
-            $origemMapeamento = $porOrigem["origem"] === "perfil"
-                ? "perfil"
-                : (($expandido["campos"] || ($expandido["periodos_matriz"] ?? [])) ? "sugerido" : "vazio");
             $layout = $layoutDetectado;
-            $familiaOrigem = $porOrigem["familia"];
 
             $campos         = $expandido["campos"];
             $periodosMatriz = $expandido["periodos_matriz"];
@@ -689,8 +685,20 @@ class ProjetoController extends ControllerAdmin
 
         $this->atualizarUploadSessao($upload, ["conta_padrao" => $contaPadrao]);
 
-        $this->message->success("Mapeamento salvo com sucesso");
-        $this->router->redirect("admin.projeto.importacao.mapear", ["id" => $projeto->id, "aba" => $aba]);
+        $resultado = $this->executarProcessamento(
+            $svc,
+            $caminho,
+            $aba,
+            $mapa,
+            (int) $projeto->id,
+            (string) $tipo,
+            $contaPadrao
+        );
+        if ($resultado === null) {
+            return;
+        }
+
+        $this->router->redirect("admin.projeto.abrir", ["id" => $projeto->id]);
     }
 
     public function processarDados(Request $request): void
@@ -741,38 +749,20 @@ class ProjetoController extends ControllerAdmin
             return;
         }
 
-        try {
-            $resultado = $svc->processar(
-                $caminho,
-                $aba,
-                $mapa,
-                (int) $projeto->id,
-                (string) $tipo,
-                (int) $this->user->uid,
-                true,
-                $contaPadrao
-            );
-
-            if ($resultado["inseridos"] === 0) {
-                $this->message->warning("Nenhum lançamento foi gerado. Revise o mapeamento, os nomes das contas e o formato dos valores.");
-            } else {
-                $msg = $resultado["inseridos"] . " lançamento(s) a partir de "
-                    . (int) ($resultado["linhas_origem"] ?? $resultado["inseridos"]) . " linha(s) da planilha";
-                if ($resultado["ignorados"] > 0) {
-                    $msg .= " · " . $resultado["ignorados"] . " linha(s) ignorada(s)";
-                }
-                $this->message->success($msg);
-            }
-
-            foreach ($resultado["avisos"] as $aviso) {
-                $this->message->warning($aviso);
-            }
-
-            $this->router->redirect("admin.projeto.importacao.mapear", ["id" => $projeto->id, "aba" => $aba]);
-        } catch (\Throwable $e) {
-            $this->message->error("Erro ao processar dados: " . $e->getMessage());
-            $this->router->redirect("admin.projeto.importacao.mapear", ["id" => $projeto->id, "aba" => $aba]);
+        $resultado = $this->executarProcessamento(
+            $svc,
+            $caminho,
+            $aba,
+            $mapa,
+            (int) $projeto->id,
+            (string) $tipo,
+            $contaPadrao
+        );
+        if ($resultado === null) {
+            return;
         }
+
+        $this->router->redirect("admin.projeto.abrir", ["id" => $projeto->id]);
     }
 
     public function simularDados(Request $request): void
@@ -1037,6 +1027,57 @@ PROMPT;
                 "aviso"           => "IA indisponível; preenchi só pelo nome das colunas.",
             ], JSON_UNESCAPED_UNICODE);
         }
+    }
+
+    /**
+     * @param array<int,string> $mapa
+     * @return array<string,mixed>|null null se já redirecionou por erro
+     */
+    private function executarProcessamento(
+        PlanilhaImportacaoService $svc,
+        string $caminho,
+        int $aba,
+        array $mapa,
+        int $idProjeto,
+        string $tipo,
+        ?int $contaPadrao
+    ): ?array {
+        try {
+            $resultado = $svc->processar(
+                $caminho,
+                $aba,
+                $mapa,
+                $idProjeto,
+                $tipo,
+                (int) $this->user->uid,
+                true,
+                $contaPadrao
+            );
+        } catch (\Throwable $e) {
+            $this->message->error("Erro ao processar dados: " . $e->getMessage());
+            $this->router->redirect("admin.projeto.importacao.mapear", ["id" => $idProjeto, "aba" => $aba]);
+            return null;
+        }
+
+        if ($resultado["inseridos"] === 0) {
+            $this->message->warning("Mapeamento salvo, mas nenhum lançamento foi gerado. Revise as colunas de data e valor.");
+            foreach ($resultado["avisos"] as $aviso) {
+                $this->message->warning($aviso);
+            }
+            $this->router->redirect("admin.projeto.importacao.mapear", ["id" => $idProjeto, "aba" => $aba]);
+            return null;
+        }
+
+        $msg = $resultado["inseridos"] . " lançamento(s) a partir de "
+            . (int) ($resultado["linhas_origem"] ?? $resultado["inseridos"]) . " linha(s) da planilha";
+        if ($resultado["ignorados"] > 0) {
+            $msg .= " · " . $resultado["ignorados"] . " linha(s) ignorada(s)";
+        }
+        $this->message->success($msg);
+        foreach ($resultado["avisos"] as $aviso) {
+            $this->message->warning($aviso);
+        }
+        return $resultado;
     }
 
     private function contaPadraoDoUpload(object $upload): ?int
