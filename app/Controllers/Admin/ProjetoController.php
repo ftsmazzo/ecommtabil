@@ -422,26 +422,20 @@ class ProjetoController extends ControllerAdmin
             $layoutDetectado = $svc->detectarLayout($headers);
 
             if ($mapaSalvo) {
-                $layout           = $svc->layoutDoMapa($mapaSalvo, $contaPadrao);
-                $expandido        = $svc->expandirMapa($mapaSalvo);
-                $origemMapeamento = "salvo";
-            } else {
-                $expandido        = ["campos" => [], "periodos_matriz" => [], "ano_base" => (int) date("Y")];
-                $origemMapeamento = "vazio";
-                $colunasModelo    = $svc->colunasModeloPorTipo((string) $upload->tipo);
-                if (($upload->origem ?? "") === "template" && $colunasModelo) {
-                    $peloModelo = $svc->sugerirPeloModelo($headers, $colunasModelo);
-                    if (!empty($peloModelo["campos"])) {
-                        $expandido        = $peloModelo + ["ano_base" => (int) date("Y")];
-                        $origemMapeamento = "sugerido";
-                    }
-                }
-                if (empty($expandido["campos"])) {
-                    $expandido        = $svc->sugerirCampos($headers, $layoutDetectado, $contasLista, $previews);
-                    $origemMapeamento = ($expandido["campos"] || $expandido["periodos_matriz"]) ? "sugerido" : "vazio";
-                }
-                $layout = $layoutDetectado;
+                DB::table("projeto_mapeamento_coluna")
+                    ->where("id_projeto", "=", (int) $projeto->id)
+                    ->where("tipo_demonstrativo", "=", (string) $upload->tipo)
+                    ->where("aba", "=", $abaAtiva)
+                    ->delete();
+                $mapaSalvo = [];
             }
+
+            $expandido = $svc->sugerirCampos($headers, $layoutDetectado, $contasLista, $previews);
+            if (!isset($expandido["ano_base"])) {
+                $expandido["ano_base"] = (int) date("Y");
+            }
+            $origemMapeamento = ($expandido["campos"] || ($expandido["periodos_matriz"] ?? [])) ? "sugerido" : "vazio";
+            $layout = $layoutDetectado;
 
             $campos         = $expandido["campos"];
             $periodosMatriz = $expandido["periodos_matriz"];
