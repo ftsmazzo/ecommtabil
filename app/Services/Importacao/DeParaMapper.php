@@ -83,16 +83,19 @@ class DeParaMapper
             "dest"  => PlanilhaImportacaoService::DEST_PERIODO,
             "tipo"  => "data",
             "nomes" => ["data", "datavenda", "datadavenda", "fecha", "fechaventa", "fechadeventa", "periodo", "competencia", "datadecriacao", "datapagamento"],
+            "nao"   => ["prazodeenvio", "dataenvio", "datadeconclusao"],
         ];
         $alvos[] = [
             "dest"  => PlanilhaImportacaoService::DEST_DESCRICAO,
             "tipo"  => "texto",
-            "nomes" => ["titulo", "titulodelapublicacion", "titulodoanuncio", "publicacion", "anuncio", "nomedoitem", "nomedoproduto", "nomeproduto"],
+            "nomes" => ["titulo", "titulodelapublicacion", "titulodoanuncio", "publicacion", "anuncio", "nomedoitem", "nomedoproduto", "nomeproduto", "descricao"],
+            "nao"   => ["status", "sku"],
         ];
         $alvos[] = [
             "dest"  => PlanilhaImportacaoService::DEST_UNIDADE,
             "tipo"  => "texto",
             "nomes" => ["marketplace", "canaldevendas", "canaldevenda", "empresa", "loja"],
+            "nao"   => [],
         ];
 
         foreach ($contas as $conta) {
@@ -108,6 +111,7 @@ class DeParaMapper
                     [$this->chaveCabecalho($nome)],
                     $conceito["quer"]
                 ))),
+                "nao"   => $conceito["nao"],
             ];
         }
 
@@ -126,8 +130,21 @@ class DeParaMapper
                 if ($alvo["tipo"] === "texto" && $col["tipo"] === "dinheiro") {
                     continue;
                 }
-                $nota = $this->notaPorNome($alvo["nomes"], $col["n"], $alvo["tipo"], $col["tipo"]);
-                if ($nota >= 72) {
+                $notaConceito = $this->notaConceito([
+                    "dest" => $alvo["dest"],
+                    "tipo" => $alvo["tipo"],
+                    "quer" => $alvo["nomes"],
+                    "nao"  => $alvo["nao"] ?? [],
+                ], $col["n"], $col["amostras"]);
+                $notaNome = $this->notaPorNome($alvo["nomes"], $col["n"], $alvo["tipo"], $col["tipo"]);
+                foreach ($alvo["nao"] ?? [] as $neg) {
+                    $neg = $this->chaveCabecalho((string) $neg);
+                    if ($neg !== "" && str_contains($col["n"], $neg)) {
+                        $notaNome -= 50;
+                    }
+                }
+                $nota = max($notaConceito, $notaNome >= 88 ? $notaNome : 0);
+                if ($nota >= 70) {
                     $pares[] = ["dest" => $alvo["dest"], "col" => $i, "nota" => $nota];
                 }
             }
@@ -219,18 +236,18 @@ class DeParaMapper
         $conceitos = [
             "receitabruta" => [
                 "tipo" => "dinheiro",
-                "quer" => ["receitabruta", "receitaporproduto", "ingresosporproducto", "ingresosporproductos", "valortotaldoproduto", "precoacordado"],
-                "nao"  => [],
+                "quer" => ["receitabruta", "receitaporproduto", "ingresosporproducto", "ingresosporproductos", "valortotaldoproduto", "precoacordado", "vrvenda", "valorvenda"],
+                "nao"  => ["envio", "frete", "tarifa", "taxa", "imposto"],
             ],
             "receitaporenvio" => [
                 "tipo" => "dinheiro",
                 "quer" => ["receitaporenvio", "ingresoporenvio", "ingresosporenvio", "fretecomprador"],
-                "nao"  => [],
+                "nao"  => ["tarifasdeenvio", "custoenvio"],
             ],
             "cmv" => [
                 "tipo" => "dinheiro",
-                "quer" => ["cmv", "preciodecost", "preciodecosto", "precodecusto", "custodoproduto"],
-                "nao"  => [],
+                "quer" => ["cmv", "preciodecost", "preciodecosto", "precodecusto", "custodoproduto", "precodecompra", "custo"],
+                "nao"  => ["envio", "frete", "tarifa", "receita"],
             ],
             "tarifadevendaeimpostos" => [
                 "tipo" => "dinheiro",
@@ -244,8 +261,8 @@ class DeParaMapper
             ],
             "tarifasdeenvio" => [
                 "tipo" => "dinheiro",
-                "quer" => ["tarifasdeenvio", "tarifadeenvio"],
-                "nao"  => [],
+                "quer" => ["tarifasdeenvio", "tarifadeenvio", "custodeenvio", "costodeenvio", "fretevendedor"],
+                "nao"  => ["receitaporenvio", "pagopelocomprador"],
             ],
             "comissaodeafiliados" => [
                 "tipo" => "dinheiro",

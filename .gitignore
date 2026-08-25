@@ -42,3 +42,8 @@ Thumbs.db
 *.swo
 
 docker-compose.override.yml
+
+# Amostras locais de planilha (não versionar binários grandes)
+/modelos/Entradas/*.xlsx
+/modelos/Entradas/*.xls
+/modelos/*.ofx

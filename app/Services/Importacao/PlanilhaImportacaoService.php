@@ -324,6 +324,54 @@ class PlanilhaImportacaoService
     }
 
     /**
+     * Perfil salvo (fingerprint) → motor por família → de-para genérico.
+     *
+     * @param array<int,string> $headers
+     * @param array<int,object> $contas
+     * @param array<int,array<int,string>> $previews
+     * @return array{campos:array<string,int>,periodos_matriz:array<int,int>,familia:string,origem:string,fingerprint:string,layout:string}
+     */
+    public function sugerirPorOrigem(
+        array $headers,
+        array $contas,
+        array $previews,
+        string $tipo,
+        string $layoutForcado = "",
+        string $extensao = ""
+    ): array {
+        $classificador = new OrigemClassificador();
+        $perfilSvc     = new OrigemPerfilService();
+        $classificado  = $classificador->classificar($headers, $extensao);
+        $fingerprint   = $classificador->fingerprint($headers);
+        $layout        = $layoutForcado !== "" ? $layoutForcado : (string) $classificado["layout"];
+        if ($layout === "") {
+            $layout = $this->detectarLayout($headers);
+        }
+
+        $salvo = $perfilSvc->buscar($fingerprint, $tipo, $contas);
+        if ($salvo && ($salvo["campos"] || $salvo["periodos_matriz"])) {
+            return [
+                "campos"          => $salvo["campos"],
+                "periodos_matriz" => $salvo["periodos_matriz"],
+                "familia"         => $classificado["familia"],
+                "origem"          => "perfil",
+                "fingerprint"     => $fingerprint,
+                "layout"          => $layout,
+            ];
+        }
+
+        $motor = (new DeParaMapper())->sugerir($headers, $layout, $contas, $previews);
+        return [
+            "campos"          => $motor["campos"],
+            "periodos_matriz" => $motor["periodos_matriz"],
+            "familia"         => $classificado["familia"],
+            "origem"          => "sugerido",
+            "fingerprint"     => $fingerprint,
+            "layout"          => $layout,
+        ];
+    }
+
+    /**
      * @param array<int,string> $headers
      * @param array<int,array<int,string>> $previews
      * @return array<int,array{letra:string,header:string,preview:string,label:string}>

@@ -16,6 +16,8 @@ use App\Models\ProjetoLancamento;
 use App\Models\ProjetoMapeamentoColuna;
 use App\Models\UsuarioProjetoRecente;
 use App\Services\Importacao\DeParaMapper;
+use App\Services\Importacao\OrigemClassificador;
+use App\Services\Importacao\OrigemPerfilService;
 use App\Services\Importacao\PlanilhaImportacaoService;
 use App\Services\MenuService;
 
@@ -419,7 +421,16 @@ class ProjetoController extends ControllerAdmin
             $contaPadrao  = $this->contaPadraoDoUpload($upload);
 
             $mapaSalvo = ProjetoMapeamentoColuna::porProjeto((int) $projeto->id, (string) $upload->tipo, $abaAtiva);
-            $layoutDetectado = $svc->detectarLayout($headers);
+            $extensao  = strtolower((string) pathinfo((string) ($upload->arquivo ?? ""), PATHINFO_EXTENSION));
+            $porOrigem = $svc->sugerirPorOrigem(
+                $headers,
+                $contasLista,
+                $previews,
+                (string) $upload->tipo,
+                "",
+                $extensao
+            );
+            $layoutDetectado = $porOrigem["layout"] ?: $svc->detectarLayout($headers);
 
             if ($mapaSalvo) {
                 DB::table("projeto_mapeamento_coluna")
@@ -430,12 +441,15 @@ class ProjetoController extends ControllerAdmin
                 $mapaSalvo = [];
             }
 
-            $expandido = $svc->sugerirCampos($headers, $layoutDetectado, $contasLista, $previews);
+            $expandido = $porOrigem;
             if (!isset($expandido["ano_base"])) {
                 $expandido["ano_base"] = (int) date("Y");
             }
-            $origemMapeamento = ($expandido["campos"] || ($expandido["periodos_matriz"] ?? [])) ? "sugerido" : "vazio";
+            $origemMapeamento = $porOrigem["origem"] === "perfil"
+                ? "perfil"
+                : (($expandido["campos"] || ($expandido["periodos_matriz"] ?? [])) ? "sugerido" : "vazio");
             $layout = $layoutDetectado;
+            $familiaOrigem = $porOrigem["familia"];
 
             $campos         = $expandido["campos"];
             $periodosMatriz = $expandido["periodos_matriz"];
@@ -506,6 +520,7 @@ class ProjetoController extends ControllerAdmin
             "periodosMatriz"        => $periodosMatriz,
             "anoBase"               => $anoBase,
             "origemMapeamento"      => $origemMapeamento,
+            "familiaOrigem"         => $familiaOrigem ?? "desconhecida",
             "mapeamentoSalvo"       => $mapaSalvo,
             "lancamentosExistentes" => $lancamentosExistentes,
             "linhaCabecalho"        => $linhaCabecalho,
@@ -655,6 +670,22 @@ class ProjetoController extends ControllerAdmin
                 "mapeamento"         => $linha["mapeamento"],
             ]);
         }
+
+        $expandido = $svc->expandirMapa($mapa);
+        $classificador = new OrigemClassificador();
+        $classificado  = $classificador->classificar(
+            $headers,
+            strtolower((string) pathinfo((string) ($upload->arquivo ?? ""), PATHINFO_EXTENSION))
+        );
+        DreConta::garantirPlanoSagaPadrao((string) $tipo, (int) ($this->user->uid ?? 0));
+        (new OrigemPerfilService())->gravar(
+            $classificador->fingerprint($headers),
+            (string) $tipo,
+            $classificado["familia"],
+            $expandido["campos"],
+            $expandido["periodos_matriz"],
+            DreConta::analiticasLista($tipo)
+        );
 
         $this->atualizarUploadSessao($upload, ["conta_padrao" => $contaPadrao]);
 
@@ -857,8 +888,11 @@ class ProjetoController extends ControllerAdmin
             }
         }
 
-        $motor = $mapper->sugerir($headers, $layout, $contas, $previews);
-        $base  = $mapper->mesclarCampos($atualCampos, $motor["campos"]);
+        $extensao  = strtolower((string) pathinfo((string) ($upload->arquivo ?? ""), PATHINFO_EXTENSION));
+        $porOrigem = $svc->sugerirPorOrigem($headers, $contas, $previews, (string) $upload->tipo, $layout, $extensao);
+        $layout    = $porOrigem["layout"] ?: $layout;
+        $motor     = ["campos" => $porOrigem["campos"], "periodos_matriz" => $porOrigem["periodos_matriz"]];
+        $base      = $mapper->mesclarCampos($atualCampos, $motor["campos"]);
         $periodosMotor = $mapper->mesclarPeriodos($atualPeriodos, $motor["periodos_matriz"], $base);
 
         $idsValidos = [];
