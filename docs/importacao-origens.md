@@ -1,35 +1,33 @@
 # Importação: origem → modelo interno
 
-O sistema **não** tenta copiar a planilha do cliente. Ele traduz para o ledger:
+O sistema **não** copia a planilha do cliente. Ele preenche o demonstrativo:
 
 `projeto + tipo (DRE/DFC/BP) + conta do plano + período + valor`
 
-## O que é origem e o que é modelo
+A esquerda do de-para é o **plano daquele tipo**. A planilha só aponta colunas. Configuração “Planilha modelo” é Excel para download, não alimenta o import.
 
-- **Origem:** qualquer arquivo que o cliente mandar (marketplace, ERP, DRE já pronto, OFX, layout novo).
-- **Modelo:** plano de contas e estrutura do demonstrativo **neste sistema**.
+## Origem vs modelo
 
-Arquivos de exemplo em `modelos/Entradas` são só amostras de *famílias*, não a lista fechada de formatos aceitos.
+- **Origem:** arquivo do cliente (marketplace, ERP, DRE em matriz, OFX).
+- **Modelo:** contas analíticas deste sistema para o tipo do upload.
 
-## Famílias (detectadas por colunas, não por nome de arquivo)
+`modelos/Entradas` são amostras de famílias, não o schema.
 
-| Família | Como reconhece | Layout |
-|---------|----------------|--------|
-| `matriz_demonstrativo` | Vários meses (Jan–Dez) + linha de conta | matriz |
-| `ledger_marketplace` | Pedido + receita/tarifa de canal | colunar |
-| `ledger_operacional` | Poucas colunas tipo Data, Custo, Venda, Tarifa | colunar |
-| `extrato_ofx` | extensão `.ofx` | ledger (caixa) |
-| `desconhecida` | não casou | de-para genérico + IA nas lacunas |
+## Motor
 
-Um layout novo cai em `desconhecida` e ainda pode ser importado. Depois que o usuário confirma o de-para, o **fingerprint** dos cabeçalhos é gravado em `projeto_origem_perfil` (nomes de conta, não IDs). A próxima planilha com as mesmas colunas reaproveita o mapa em qualquer projeto e em qualquer hospedagem.
+Para cada slot do plano, escolhe 0 ou 1 coluna (tipo data/texto/dinheiro). Coluna sem slot é ignorada. Perfil por fingerprint (v4) reusa mapa confirmado (nome de conta, não ID).
 
-## Pacote para o ambiente real (FTP)
+A IA, se usada, **revisa o mapa** e pode corrigir o motor; não fica limitada a lacunas.
 
-Na implantação (Docker/EasyPanel) o `docker-entrypoint.sh` roda `scripts/php/migrate.php` **antes** do Apache. Arquivos novos em `storage/migrations/` (ex.: `0.1.5.sql`) entram sozinhos. Não é necessário SSH na VPS.
+## Famílias (só layout)
 
-Bancos já existentes marcam `0.1.1`–`0.1.4` como baseline e só aplicam o que faltar.
+| Família | Layout |
+|---------|--------|
+| `matriz_demonstrativo` | meses + linha de conta |
+| `ledger_marketplace` / `ledger_operacional` | colunar |
+| `extrato_ofx` | ledger |
+| `desconhecida` | de-para pelo plano |
 
-## O que não fazer
+## Pacote
 
-- Não criar um mapa exclusivo Shopee vs ML vs “os 5 arquivos”.
-- Não persistir `conta_12` como verdade absoluta entre ambientes.
+`docker-entrypoint.sh` → `scripts/php/migrate.php`. Não depende de path de VPS.

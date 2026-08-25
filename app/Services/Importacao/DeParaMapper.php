@@ -5,8 +5,8 @@ namespace App\Services\Importacao;
 use App\Models\DreConta;
 
 /**
- * Motor de de-para: casa cabeçalho da planilha com campo do sistema.
- * Não usa IA. A IA só preenche buracos em cima disto.
+ * Motor slot-first: para cada campo do demonstrativo, escolhe 0 ou 1 coluna.
+ * A planilha é evidência. Famílias de origem só detectam layout (matriz vs ledger).
  */
 class DeParaMapper
 {
@@ -55,8 +55,7 @@ class DeParaMapper
     }
 
     /**
-     * Para cada campo do MODELO, escolhe a coluna do arquivo com maior score
-     * (conceito + tipo das amostras). Não depende de template Shopee/ML.
+     * Percorre os slots do plano. Conta sem coluna parecida fica vazia (válido).
      *
      * @param array<int,string> $headers
      * @param array<int,string> $norm
@@ -88,7 +87,7 @@ class DeParaMapper
         $alvos[] = [
             "dest"  => PlanilhaImportacaoService::DEST_DESCRICAO,
             "tipo"  => "texto",
-            "nomes" => ["titulodoanuncio", "titulodelapublicacion", "titulodapublicacion", "nomedoproduto", "nomedoitem", "nomeproduto", "descricaoml"],
+            "nomes" => ["titulodoanuncio", "titulodelapublicacion", "titulodapublicacion", "nomedoproduto", "nomedoitem", "nomeproduto", "descricaoml", "descricao"],
             "nao"   => ["status", "sku", "custo", "url", "cidade"],
         ];
         $alvos[] = [
@@ -101,17 +100,18 @@ class DeParaMapper
         foreach ($contas as $conta) {
             $nome = trim((string) $conta->nome);
             $conceito = $this->conceitoDaConta($nome);
-            if ($conceito === null) {
-                continue;
+            $nomes = [$this->chaveCabecalho($nome)];
+            $nao = [];
+            if ($conceito !== null) {
+                $nomes = array_values(array_unique(array_merge($nomes, $conceito["quer"])));
+                $nao = $conceito["nao"];
             }
             $alvos[] = [
                 "dest"  => "conta_" . (int) $conta->id,
                 "tipo"  => "dinheiro",
-                "nomes" => array_values(array_unique(array_merge(
-                    [$this->chaveCabecalho($nome)],
-                    $conceito["quer"]
-                ))),
-                "nao"   => $conceito["nao"],
+                "nomes" => $nomes,
+                "nao"   => $nao,
+                "conta" => $nome,
             ];
         }
 
@@ -122,6 +122,10 @@ class DeParaMapper
                     continue;
                 }
                 $nota = $this->notaToken($alvo["nomes"], $alvo["nao"] ?? [], $col["n"]);
+                $alias = $this->aliasParaConta($col["n"]);
+                if ($alias !== null && isset($alvo["conta"]) && strcasecmp($alias, (string) $alvo["conta"]) === 0) {
+                    $nota = max($nota, 100);
+                }
                 if ($nota < 85) {
                     continue;
                 }
@@ -211,26 +215,28 @@ class DeParaMapper
         }
         foreach ($nao as $neg) {
             $neg = $this->chaveCabecalho((string) $neg);
-            if ($neg !== "" && strlen($neg) >= 4 && str_contains($n, $neg)) {
+            if ($neg === "") {
+                continue;
+            }
+            if ($n === $neg || (strlen($neg) >= 4 && str_contains($n, $neg))) {
                 return 0;
             }
         }
         $melhor = 0;
         foreach ($quer as $q) {
             $q = $this->chaveCabecalho((string) $q);
-            if ($q === "") {
+            if ($q === "" || strlen($q) < 4) {
                 continue;
             }
-            if ($n === $q && strlen($q) >= 4) {
+            if ($n === $q) {
                 return 100;
             }
-            if (strlen($q) < 8) {
+            if (str_starts_with($n, $q) || str_starts_with($q, $n)) {
+                $melhor = max($melhor, 96);
                 continue;
             }
-            if (str_contains($n, $q)) {
-                $melhor = max($melhor, 96);
-            } elseif (strlen($n) >= 8 && str_contains($q, $n)) {
-                $melhor = max($melhor, 90);
+            if (str_contains($n, $q) || (strlen($n) >= 4 && str_contains($q, $n))) {
+                $melhor = max($melhor, 92);
             }
         }
         return $melhor;
@@ -496,6 +502,38 @@ class DeParaMapper
             $colunasUsadas[$indice] = true;
         }
         return $atual;
+    }
+
+    /**
+     * IA manda no slot que ela preencheu; o motor só completa o que ela omitiu.
+     *
+     * @param array<string,int> $motor
+     * @param array<string,int> $ia
+     * @return array<string,int>
+     */
+    public function aplicarRevisaoIa(array $motor, array $ia): array
+    {
+        $campos = [];
+        $usadas = [];
+        foreach ($ia as $dest => $indice) {
+            $dest   = (string) $dest;
+            $indice = (int) $indice;
+            if ($dest === "" || isset($usadas[$indice])) {
+                continue;
+            }
+            $campos[$dest] = $indice;
+            $usadas[$indice] = true;
+        }
+        foreach ($motor as $dest => $indice) {
+            $dest   = (string) $dest;
+            $indice = (int) $indice;
+            if (isset($campos[$dest]) || isset($usadas[$indice])) {
+                continue;
+            }
+            $campos[$dest] = $indice;
+            $usadas[$indice] = true;
+        }
+        return $campos;
     }
 
     /**

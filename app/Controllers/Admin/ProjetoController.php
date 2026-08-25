@@ -911,16 +911,24 @@ class ProjetoController extends ControllerAdmin
 
         $modeloLinhas = [];
         $modeloLinhas[] = PlanilhaImportacaoService::DEST_PERIODO . " | Data da competência | células de DATA | "
-            . (isset($base[PlanilhaImportacaoService::DEST_PERIODO]) ? "já preenchido" : "VAZIO");
+            . (isset($base[PlanilhaImportacaoService::DEST_PERIODO])
+                ? ("motor→[" . (int) $base[PlanilhaImportacaoService::DEST_PERIODO] . "] (pode corrigir)")
+                : "sem coluna");
         $modeloLinhas[] = PlanilhaImportacaoService::DEST_DESCRICAO . " | Descrição do produto/anúncio | TEXTO, não dinheiro | "
-            . (isset($base[PlanilhaImportacaoService::DEST_DESCRICAO]) ? "já preenchido" : "VAZIO");
+            . (isset($base[PlanilhaImportacaoService::DEST_DESCRICAO])
+                ? ("motor→[" . (int) $base[PlanilhaImportacaoService::DEST_DESCRICAO] . "] (pode corrigir)")
+                : "sem coluna");
         $modeloLinhas[] = PlanilhaImportacaoService::DEST_UNIDADE . " | Marketplace/loja | texto opcional | "
-            . (isset($base[PlanilhaImportacaoService::DEST_UNIDADE]) ? "já preenchido" : "VAZIO");
+            . (isset($base[PlanilhaImportacaoService::DEST_UNIDADE])
+                ? ("motor→[" . (int) $base[PlanilhaImportacaoService::DEST_UNIDADE] . "] (pode corrigir)")
+                : "sem coluna");
         foreach ($contas as $conta) {
             $dest = "conta_" . $conta->id;
             $guia = $mapper->guiaPorNomeConta((string) $conta->nome);
             $modeloLinhas[] = $dest . " | " . $conta->nome . " | dinheiro | " . ($guia["hint"] ?? "")
-                . " | " . (isset($base[$dest]) ? "já preenchido" : "VAZIO");
+                . " | " . (isset($base[$dest])
+                    ? ("motor→[" . (int) $base[$dest] . "] (pode corrigir)")
+                    : "sem coluna");
         }
 
         $colunasLinhas = [];
@@ -936,16 +944,16 @@ class ProjetoController extends ControllerAdmin
         }
 
         $systemPrompt = <<<PROMPT
-Você completa só o que o motor deixou VAZIO. A BASE é o modelo.
+Você revisa o de-para inteiro. A BASE é o MODELO (slots). A planilha só prova.
 Responda SOMENTE JSON: {"campos": {"__periodo__": 0, "conta_12": 3}}
 Regras:
-- Não altere campo já preenchido.
+- Pode CORRIGIR o motor se a coluna estiver na conta errada.
 - Uma coluna, um campo.
-- tipo=ignorar: nunca use (id, sku, cidade, estado, país, kit, host).
+- tipo=ignorar: nunca use.
 - tipo=texto: só descrição/unidade, nunca conta de dinheiro.
-- tipo=dinheiro: só conta de dinheiro. Prefira o campo cujo NOME mais se parece com o cabeçalho (ex. "Receita por envio (BRL)" → Receita por envio, NÃO CMV).
+- tipo=dinheiro: só conta de dinheiro. Nome da conta ≈ cabeçalho (ex. "Receita por envio" → Receita por envio, NÃO CMV).
 - tipo=data: só __periodo__.
-- Se não houver coluna parecida, omita. Não invente.
+- Slot sem coluna parecida: omita. Não invente. Vazio é válido (aluguel, folha…).
 PROMPT;
 
         $prompt  = "Demonstrativo: " . strtoupper((string) $upload->tipo) . "\n\n";
@@ -975,7 +983,7 @@ PROMPT;
                     "campos"          => $base,
                     "periodos_matriz" => $atualPeriodos,
                     "somente_lacunas" => true,
-                    "aviso"           => "IA indisponível; usei só o motor de cabeçalhos, sem alterar o que já estava mapeado.",
+                    "aviso"           => "IA indisponível; usei só o motor do demonstrativo.",
                 ], JSON_UNESCAPED_UNICODE);
                 return;
             }
@@ -1032,15 +1040,15 @@ PROMPT;
                 $usados[$indice] = true;
             }
 
-            $campos  = $mapper->mesclarCampos($base, $campos);
-            $periodos = $mapper->mesclarPeriodos($atualPeriodos, $periodos, $campos);
+            $campos  = $mapper->aplicarRevisaoIa($base, $campos);
+            $periodos = $mapper->mesclarPeriodos($periodos, $atualPeriodos, $campos);
 
             echo json_encode([
                 "ok"              => true,
                 "layout"          => $layout,
                 "campos"          => $campos,
                 "periodos_matriz" => $periodos,
-                "somente_lacunas" => true,
+                "somente_lacunas" => false,
             ], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
             echo json_encode([

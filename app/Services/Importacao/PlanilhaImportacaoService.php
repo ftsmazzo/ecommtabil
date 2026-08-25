@@ -412,62 +412,31 @@ class PlanilhaImportacaoService
     }
 
     /**
-     * Campos da esquerda no de-para: o que o demonstrativo precisa.
+     * Lista da esquerda no de-para: só o demonstrativo (data + descrição + contas do plano).
+     * A tela Config → Planilha modelo não entra aqui (é só Excel para download).
      *
      * @param array<string,array<int,object>> $contasGrupos
      * @return array{parametrizado:bool,campos:array<int,array{destino:string,label:string,hint:string,grupo:string,busca:string}>}
      */
     public function camposDePara(string $tipo, array $contasGrupos = []): array
     {
-        $colunasModelo = $this->colunasModeloPorTipo($tipo);
-        $campos        = [];
+        $campos = [];
+        $campos[] = [
+            "destino" => self::DEST_PERIODO,
+            "label"   => "Data / competência",
+            "hint"    => "Coluna de data da planilha do cliente",
+            "grupo"   => "modelo",
+            "busca"   => "data periodo competencia",
+        ];
+        $campos[] = [
+            "destino" => self::DEST_DESCRICAO,
+            "label"   => "Descrição",
+            "hint"    => "Produto, título do anúncio ou histórico",
+            "grupo"   => "modelo",
+            "busca"   => "descricao produto titulo",
+        ];
 
-        foreach ($colunasModelo as $col) {
-            $destino = trim((string) ($col->campo_dre ?? ""));
-            if ($destino === "") {
-                continue;
-            }
-            $label = trim((string) ($col->descricao ?? $destino));
-            $hint  = trim((string) ($col->helper ?? ""));
-            $labelNorm = mb_strtolower($label, "UTF-8");
-            if (in_array($labelNorm, ["campo padrão", "campo padrao", "padrão", "padrao", "campo"], true)) {
-                if (str_starts_with($destino, "conta_")) {
-                    continue;
-                }
-                $label = "";
-            }
-            $campos[] = [
-                "destino" => $destino,
-                "label"   => $label !== "" ? $label : $destino,
-                "hint"    => $hint,
-                "grupo"   => "modelo",
-                "busca"   => mb_strtolower($label . " " . $destino, "UTF-8"),
-            ];
-        }
-
-        $parametrizado = $campos !== [];
-        $destinosJa    = array_column($campos, "destino");
-
-        if (!in_array(self::DEST_PERIODO, $destinosJa, true)) {
-            array_unshift($campos, [
-                "destino" => self::DEST_PERIODO,
-                "label"   => "Data / competência",
-                "hint"    => "Coluna de data da planilha do cliente",
-                "grupo"   => "modelo",
-                "busca"   => "data periodo competencia",
-            ]);
-            $destinosJa[] = self::DEST_PERIODO;
-        }
-        if (!in_array(self::DEST_DESCRICAO, $destinosJa, true)) {
-            $campos[] = [
-                "destino" => self::DEST_DESCRICAO,
-                "label"   => "Descrição",
-                "hint"    => "Produto, título do anúncio ou histórico",
-                "grupo"   => "modelo",
-                "busca"   => "descricao produto titulo",
-            ];
-            $destinosJa[] = self::DEST_DESCRICAO;
-        }
+        $destinosJa = [self::DEST_PERIODO, self::DEST_DESCRICAO];
 
         foreach ($contasGrupos as $raiz => $contasDoGrupo) {
             foreach ($contasDoGrupo as $conta) {
@@ -479,7 +448,7 @@ class PlanilhaImportacaoService
                 $campos[] = [
                     "destino" => $destino,
                     "label"   => $label,
-                    "hint"    => "Conta do modelo. Escolha a coluna de valor do cliente, ou deixe vazio.",
+                    "hint"    => "Conta do demonstrativo. Sem coluna parecida, deixe vazio.",
                     "grupo"   => (string) $raiz,
                     "busca"   => mb_strtolower($label, "UTF-8"),
                 ];
@@ -487,15 +456,13 @@ class PlanilhaImportacaoService
             }
         }
 
-        if (!in_array(self::DEST_UNIDADE, $destinosJa, true)) {
-            $campos[] = [
-                "destino" => self::DEST_UNIDADE,
-                "label"   => "Unidade / Marketplace",
-                "hint"    => "Opcional",
-                "grupo"   => "modelo",
-                "busca"   => "unidade marketplace",
-            ];
-        }
+        $campos[] = [
+            "destino" => self::DEST_UNIDADE,
+            "label"   => "Unidade / Marketplace",
+            "hint"    => "Opcional",
+            "grupo"   => "modelo",
+            "busca"   => "unidade marketplace",
+        ];
 
         $mapper = new DeParaMapper();
         foreach ($campos as $i => $campo) {
@@ -503,7 +470,7 @@ class PlanilhaImportacaoService
         }
 
         return [
-            "parametrizado" => $parametrizado,
+            "parametrizado" => $contasGrupos !== [],
             "campos"        => $campos,
         ];
     }
