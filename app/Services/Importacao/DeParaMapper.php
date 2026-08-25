@@ -82,13 +82,13 @@ class DeParaMapper
         $alvos[] = [
             "dest"  => PlanilhaImportacaoService::DEST_PERIODO,
             "tipo"  => "data",
-            "nomes" => ["datadavenda", "datavenda", "fechadeventa", "fechaventa", "datadecriacaodopedido", "datapagamentodopedido", "datapagamento"],
+            "nomes" => ["datadavenda", "datavenda", "fechadeventa", "fechaventa", "datadecriacaodopedido", "datapagamentodopedido", "datapagamento", "data"],
             "nao"   => ["prazo", "envio", "conclusao", "parcelamento"],
         ];
         $alvos[] = [
             "dest"  => PlanilhaImportacaoService::DEST_DESCRICAO,
             "tipo"  => "texto",
-            "nomes" => ["titulodoanuncio", "titulodelapublicacion", "titulodapublicacion", "nomedoproduto", "nomedoitem", "nomeproduto"],
+            "nomes" => ["titulodoanuncio", "titulodelapublicacion", "titulodapublicacion", "nomedoproduto", "nomedoitem", "nomeproduto", "descricaoml"],
             "nao"   => ["status", "sku", "custo", "url", "cidade"],
         ];
         $alvos[] = [
@@ -139,6 +139,20 @@ class DeParaMapper
             $campos[$p["dest"]] = $p["col"];
             $usadas[$p["col"]] = true;
         }
+
+        if (!isset($campos[PlanilhaImportacaoService::DEST_PERIODO])) {
+            $candidatas = [];
+            foreach ($classes as $i => $col) {
+                if (isset($usadas[$i]) || $col["tipo"] !== "data") {
+                    continue;
+                }
+                $candidatas[] = (int) $i;
+            }
+            if (count($candidatas) === 1) {
+                $campos[PlanilhaImportacaoService::DEST_PERIODO] = $candidatas[0];
+            }
+        }
+
         return $campos;
     }
 
@@ -204,11 +218,14 @@ class DeParaMapper
         $melhor = 0;
         foreach ($quer as $q) {
             $q = $this->chaveCabecalho((string) $q);
-            if ($q === "" || strlen($q) < 8) {
+            if ($q === "") {
                 continue;
             }
-            if ($n === $q) {
+            if ($n === $q && strlen($q) >= 4) {
                 return 100;
+            }
+            if (strlen($q) < 8) {
+                continue;
             }
             if (str_contains($n, $q)) {
                 $melhor = max($melhor, 96);
@@ -235,7 +252,7 @@ class DeParaMapper
             "sku", "nvenda", "nodevenda", "ndevenda", "numerodevenda", "numerovenda", "id", "pack", "kit",
             "cidade", "estado", "pais", "uf", "cep", "cpf", "cnpj", "telefone",
             "url", "acompanhamento", "rastreio", "tracking", "nfe", "anexo",
-            "unidades", "quantidade", "variacao",
+            "unidades", "quantidade", "variacao", "pedido", "serie", "lucro", "vendaliq",
         ] as $lixo) {
             if ($n === $lixo || str_starts_with($n, $lixo) || (strlen($lixo) >= 5 && str_contains($n, $lixo))) {
                 return "ignorar";
@@ -310,22 +327,22 @@ class DeParaMapper
             ],
             "cmv" => [
                 "tipo" => "dinheiro",
-                "quer" => ["cmv", "preciodecost", "preciodecosto", "precodecusto", "custodoproduto", "precodecompra", "preciodecompra"],
+                "quer" => ["cmv", "preciodecost", "preciodecosto", "precodecusto", "custodoproduto", "precodecompra", "preciodecompra", "custo"],
                 "nao"  => ["envio", "frete", "tarifa", "receita"],
             ],
             "tarifasdeenvio" => [
                 "tipo" => "dinheiro",
-                "quer" => ["tarifasdeenvio", "tarifadeenvio"],
+                "quer" => ["tarifasdeenvio", "tarifadeenvio", "frete"],
                 "nao"  => ["receitaporenvio", "pagopelocomprador", "url", "acompanhamento", "troca"],
             ],
             "tarifadevendaeimpostos" => [
                 "tipo" => "dinheiro",
-                "quer" => ["tarifadevendaeimpostos", "tarifadevenda", "tarifadeventa", "cargoporserviciodeventa", "taxadecomissao"],
+                "quer" => ["tarifadevendaeimpostos", "tarifadevenda", "tarifadeventa", "cargoporserviciodeventa", "taxadecomissao", "tarifaml"],
                 "nao"  => ["parcelamento", "pais", "cidade", "url"],
             ],
             "cuponsedescontos" => [
                 "tipo" => "dinheiro",
-                "quer" => ["cuponsedescontos", "cancelamentoseereembolsos", "cancelamentosereembolsos", "descontosbonus", "descontodovendedor"],
+                "quer" => ["cuponsedescontos", "cancelamentoseereembolsos", "cancelamentosereembolsos", "descontosbonus", "descontodovendedor", "desconto"],
                 "nao"  => ["nfe", "anexo", "url"],
             ],
             "comissaodeafiliados" => [
@@ -340,8 +357,8 @@ class DeParaMapper
             ],
             "deducoes" => [
                 "tipo" => "dinheiro",
-                "quer" => ["deducoes"],
-                "nao"  => [],
+                "quer" => ["deducoes", "imposto"],
+                "nao"  => ["tarifadevenda"],
             ],
         ];
         return $conceitos[$n] ?? null;
