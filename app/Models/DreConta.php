@@ -20,11 +20,11 @@ class DreConta extends Model
     private static function resolverTipo(?string $tipo): string
     {
         if ($tipo) {
-            return $tipo;
+            return strtolower(trim($tipo));
         }
 
         $padrao = TipoDemonstrativo::padrao();
-        return $padrao ? $padrao->sigla : "dre";
+        return $padrao ? strtolower((string) $padrao->sigla) : "dre";
     }
 
     /**
@@ -91,7 +91,7 @@ class DreConta extends Model
         $tipo = self::resolverTipo($tipo);
 
         $contas = DB::table("dre_conta")
-            ->where("tipo_demonstrativo", "=", $tipo)
+            ->whereRaw("LOWER(tipo_demonstrativo) = ?", [$tipo])
             ->where("tipo", "=", "analitica")
             ->where("trash", "=", 0)
             ->orderBy("codigo")
@@ -138,7 +138,7 @@ class DreConta extends Model
         static $cache = [];
         if (!isset($cache[$tipo])) {
             $cache[$tipo] = DB::table("dre_conta")
-                ->where("tipo_demonstrativo", "=", $tipo)
+                ->whereRaw("LOWER(tipo_demonstrativo) = ?", [$tipo])
                 ->where("tipo", "=", "analitica")
                 ->where("trash", "=", 0)
                 ->where("eh_resultado", "=", 0)
@@ -255,27 +255,56 @@ class DreConta extends Model
                 ["Frete Entrega Direta", "diminui"],
                 ["Depreciação", "diminui"],
                 ["Resultado Financeiro", "diminui"],
+                ["Receita Bruta de Vendas", "aumenta"],
+                ["Devoluções e Cancelamentos", "diminui"],
+                ["CMV (Custo das Mercadorias Vendidas)", "diminui"],
+                ["Comissões de Marketplace", "diminui"],
+                ["Frete Líquido (Subsídio de Frete)", "diminui"],
+                ["Depreciação e Amortização", "diminui"],
+                ["Despesas Financeiras", "diminui"],
+                ["Receitas Financeiras", "aumenta"],
+                ["Provisão para IR/CSLL", "diminui"],
             ],
             "dfc" => [
                 ["Recebimentos de Clientes", "aumenta"],
+                ["Rendimentos Financeiros Recebidos", "aumenta"],
                 ["Pagamentos a Fornecedores", "diminui"],
+                ["Pagamento de Despesas Operacionais", "diminui"],
+                ["Pagamento de Tributos", "diminui"],
+                ["Aquisição de Imobilizado (Capex)", "diminui"],
+                ["Captação de Empréstimos", "aumenta"],
+                ["Amortização de Empréstimos", "diminui"],
+                ["Juros Pagos", "diminui"],
+                ["Saldo Inicial de Caixa", "aumenta"],
+                ["Saldo Final de Caixa", "aumenta"],
             ],
             "bp" => [
+                ["Caixa e Equivalentes de Caixa", "aumenta"],
                 ["Caixa e Equivalentes", "aumenta"],
+                ["Contas a Receber (Clientes)", "aumenta"],
                 ["Contas a Receber", "aumenta"],
                 ["Estoques", "aumenta"],
+                ["Impostos a Recuperar", "aumenta"],
+                ["Imobilizado (Bruto)", "aumenta"],
+                ["Depreciação Acumulada", "diminui"],
+                ["Fornecedores a Pagar", "diminui"],
                 ["Fornecedores", "diminui"],
+                ["Empréstimos e Financiamentos (Circulante)", "diminui"],
                 ["Empréstimos CP", "diminui"],
+                ["Impostos a Recolher", "diminui"],
+                ["Salários e Encargos a Pagar", "diminui"],
+                ["Empréstimos e Financiamentos (Não Circulante)", "diminui"],
                 ["Empréstimos LP", "diminui"],
+                ["Capital Social", "aumenta"],
+                ["Lucros Acumulados", "aumenta"],
                 ["Patrimônio Líquido", "aumenta"],
             ],
         ];
 
-        $chave = strtolower($tipo);
-        $lista = $catalogo[$chave] ?? $catalogo["dre"];
+        $lista = $catalogo[$tipo] ?? $catalogo["dre"];
 
         $existentes = DB::table("dre_conta")
-            ->where("tipo_demonstrativo", "=", $tipo)
+            ->whereRaw("LOWER(tipo_demonstrativo) = ?", [$tipo])
             ->where("trash", "=", 0)
             ->get();
 
@@ -305,6 +334,7 @@ class DreConta extends Model
                 "tipo"               => "analitica",
                 "natureza"           => $natureza,
                 "sinal"              => $natureza === "diminui" ? -1 : 1,
+                "eh_resultado"       => 0,
                 "ordem"              => 100 + $ordem,
                 "trash"              => 0,
                 "created_by"         => $idUsuario ?: null,

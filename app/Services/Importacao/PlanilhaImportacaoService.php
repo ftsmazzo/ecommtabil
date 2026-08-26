@@ -508,14 +508,36 @@ class PlanilhaImportacaoService
     }
 
     /**
-     * Lista da esquerda no de-para: só o demonstrativo (data + descrição + contas do plano).
-     * A tela Config → Planilha modelo não entra aqui (é só Excel para download).
+     * Lista da esquerda no de-para.
+     * Matriz: só a coluna da conta (linhas) — meses vão nos checkboxes.
+     * Ledger: data + descrição + contas do plano.
      *
      * @param array<string,array<int,object>> $contasGrupos
      * @return array{parametrizado:bool,campos:array<int,array{destino:string,label:string,hint:string,grupo:string,busca:string}>}
      */
-    public function camposDePara(string $tipo, array $contasGrupos = []): array
+    public function camposDePara(string $tipo, array $contasGrupos = [], string $layout = ""): array
     {
+        if ($layout === self::LAYOUT_MATRIZ) {
+            $campos = [[
+                "destino"     => self::DEST_CONTA,
+                "label"       => "Conta (texto na linha)",
+                "hint"        => "Coluna com o nome da conta do demonstrativo (ex.: Linha (R$)). Os valores ficam nas colunas de mês.",
+                "grupo"       => "modelo",
+                "busca"       => "conta linha nome",
+                "obrigatorio" => true,
+                "esperado"    => true,
+                "exemplos"    => "Linha (R$) · Conta · Descrição da conta",
+            ]];
+            $mapper = new DeParaMapper();
+            $campos[0] = $mapper->enriquecerCampo($campos[0]);
+            $campos[0]["obrigatorio"] = true;
+            $campos[0]["esperado"] = true;
+            return [
+                "parametrizado" => true,
+                "campos"        => $campos,
+            ];
+        }
+
         $campos = [];
         $campos[] = [
             "destino" => self::DEST_PERIODO,
@@ -569,6 +591,36 @@ class PlanilhaImportacaoService
             "parametrizado" => $contasGrupos !== [],
             "campos"        => $campos,
         ];
+    }
+
+    /**
+     * Prefere aba de ano (2026) em vez de Leia-me / título.
+     *
+     * @param array<int,string> $sheetNames
+     */
+    public function escolherAbaDemonstrativo(array $sheetNames, int $abaAtual = 0): int
+    {
+        if ($sheetNames === []) {
+            return 0;
+        }
+        if ($abaAtual >= 0 && $abaAtual < count($sheetNames)) {
+            $atual = trim((string) $sheetNames[$abaAtual]);
+            if (preg_match('/^(20\d{2})$/', $atual)) {
+                return $abaAtual;
+            }
+        }
+        $melhor = null;
+        $melhorAno = 0;
+        foreach ($sheetNames as $i => $nome) {
+            if (preg_match('/^(20\d{2})$/', trim((string) $nome), $m)) {
+                $ano = (int) $m[1];
+                if ($ano >= $melhorAno) {
+                    $melhorAno = $ano;
+                    $melhor = (int) $i;
+                }
+            }
+        }
+        return $melhor ?? max(0, min($abaAtual, count($sheetNames) - 1));
     }
 
     /**
@@ -1322,10 +1374,21 @@ class PlanilhaImportacaoService
     private function pareceLinhaResumo(string $nome): bool
     {
         $n = $this->normalizar($nome);
+        if (str_starts_with($n, "indicador") || str_contains($n, "nopat")) {
+            return true;
+        }
         return in_array($n, [
             "total", "totais", "subtotal", "soma", "somageral", "totalano",
             "ativo", "passivo", "patrimonioliquido", "ativocirculante", "passivocirculante",
             "ativonao", "passivonao", "diferenca", "diferencadeveserzero",
+            "receitaliquida", "lucrobruto", "totaldespesasoperacionais", "ebitda",
+            "ebitresultadooperacional", "resultadooperacional", "ebit",
+            "resultadoantesdoircslllair", "lair", "lucroliquidodoperiodo",
+            "fluxodecaixaoperacional", "fluxodecaixadeinvestimentos",
+            "fluxodecaixadefinanciamentos", "variacaoliquidadecaixanoperiodo",
+            "totaldoativocirculante", "imobilizadoliquido", "totaldoativonaocirculante",
+            "totaldoativo", "totaldopassivocirculante", "totaldopassivonaocirculante",
+            "totaldopatrimonioliquido", "totaldopassivopatrimonioliquido",
         ], true)
             || str_starts_with($n, "total")
             || str_starts_with($n, "subtotal")
@@ -1409,7 +1472,7 @@ class PlanilhaImportacaoService
     {
         return in_array($n, [
             "conta", "contaplano", "nomedaconta", "descricaodaconta",
-            "classificacao", "rubrica",
+            "classificacao", "rubrica", "linha", "linhars", "linhadaconta",
         ], true) || (str_starts_with($n, "conta") && !str_contains($n, "contato"));
     }
 

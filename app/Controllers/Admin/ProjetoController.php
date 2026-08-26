@@ -426,6 +426,7 @@ class ProjetoController extends ControllerAdmin
             if ($abaAtiva < 0 || $abaAtiva >= count($sheetNames)) {
                 $abaAtiva = 0;
             }
+            $abaAtiva = $svc->escolherAbaDemonstrativo($sheetNames, $abaAtiva);
 
             $sheet   = $aberto["spreadsheet"]->getSheet($abaAtiva);
             $lido    = $svc->lerCabecalhos($sheet, 3);
@@ -435,9 +436,9 @@ class ProjetoController extends ControllerAdmin
             $colunas = $svc->rotulosColunas($headers, $previews);
             $linhaCabecalho = (int) ($lido["linhaCabecalho"] ?? 1);
 
+            DreConta::garantirPlanoSagaPadrao((string) $upload->tipo, (int) ($this->user->uid ?? 0));
             $contasGrupos = DreConta::analiticasPorTipo($upload->tipo);
             $contasLista  = DreConta::analiticasLista($upload->tipo);
-            $dePara       = $svc->camposDePara((string) $upload->tipo, $contasGrupos);
             $contaPadrao  = $this->contaPadraoDoUpload($upload);
 
             $mapaSalvo = ProjetoMapeamentoColuna::porProjeto((int) $projeto->id, (string) $upload->tipo, $abaAtiva);
@@ -452,6 +453,7 @@ class ProjetoController extends ControllerAdmin
             );
             $layoutDetectado = $porOrigem["layout"] ?: $svc->detectarLayout($headers);
             $familiaOrigem = $porOrigem["familia"];
+            $dePara       = $svc->camposDePara((string) $upload->tipo, $contasGrupos, (string) $layoutDetectado);
             $mapperTipos = new DeParaMapper();
 
             if ($mapaSalvo) {

@@ -24,11 +24,6 @@ class DeParaMapper
 
         if ($layout === PlanilhaImportacaoService::LAYOUT_MATRIZ) {
             $usados = [];
-            $melhorData = $this->melhorIndicePeriodo($norm);
-            if ($melhorData !== null) {
-                $campos[PlanilhaImportacaoService::DEST_PERIODO] = $melhorData;
-                $usados[$melhorData] = true;
-            }
             foreach ($norm as $i => $h) {
                 if (isset($usados[$i])) {
                     continue;
@@ -188,7 +183,11 @@ class DeParaMapper
         if ($dest === PlanilhaImportacaoService::DEST_PERIODO) {
             return "data";
         }
-        if ($dest === PlanilhaImportacaoService::DEST_DESCRICAO || $dest === PlanilhaImportacaoService::DEST_UNIDADE) {
+        if (
+            $dest === PlanilhaImportacaoService::DEST_DESCRICAO
+            || $dest === PlanilhaImportacaoService::DEST_UNIDADE
+            || $dest === PlanilhaImportacaoService::DEST_CONTA
+        ) {
             return "texto";
         }
         return "dinheiro";
@@ -686,7 +685,7 @@ class DeParaMapper
         ) {
             return 0;
         }
-        if (str_contains($n, "datadavenda") || str_contains($n, "fechadeventa") || $n === "datavenda") {
+        if (str_contains($n, "datadecriacaodopedido") || str_contains($n, "datadecriacao")) {
             return 100;
         }
         if (
@@ -695,10 +694,10 @@ class DeParaMapper
             || str_contains($n, "datapagamento")
             || str_contains($n, "pagamentodopedido")
         ) {
-            return 95;
-        }
-        if (str_contains($n, "datadecriacaodopedido") || str_contains($n, "datadecriacao")) {
             return 90;
+        }
+        if (str_contains($n, "datadavenda") || str_contains($n, "fechadeventa") || $n === "datavenda") {
+            return 95;
         }
         if ($n === "data" || $n === "fecha" || $n === "date" || $n === "periodo" || $n === "competencia") {
             return 70;
@@ -734,21 +733,49 @@ class DeParaMapper
         return [
             "receitaporproduto"         => "Receita Bruta",
             "receitaporproductos"       => "Receita Bruta",
-            "receitabrutadevendas"      => "Receita Bruta",
             "receitabruta"              => "Receita Bruta",
-            "devolucoesecancelamentos"  => "Cupons e Descontos",
+            "receitabrutadevendas"      => "Receita Bruta de Vendas",
+            "comissoesdemarketplace"    => "Comissões de Marketplace",
+            "freteliquido"              => "Frete Líquido (Subsídio de Frete)",
+            "freteliquidosubsidio"      => "Frete Líquido (Subsídio de Frete)",
+            "cmvcustodasmercadorias"    => "CMV (Custo das Mercadorias Vendidas)",
+            "cmvcustodasmercadoriasvendidas" => "CMV (Custo das Mercadorias Vendidas)",
+            "depreciacaoeamortizacao"   => "Depreciação e Amortização",
+            "despesasfinanceiras"       => "Despesas Financeiras",
+            "receitasfinanceiras"       => "Receitas Financeiras",
+            "provisaoparaircsll"        => "Provisão para IR/CSLL",
+            "devolucoesecancelamentos"  => "Devoluções e Cancelamentos",
             "impostossobrevendas"       => "Deduções",
             "recebimentosdeclientes"    => "Recebimentos de Clientes",
+            "rendimentosfinanceirosrecebidos" => "Rendimentos Financeiros Recebidos",
+            "pagamentosafornecedores"   => "Pagamentos a Fornecedores",
             "pagamentosfornecedores"    => "Pagamentos a Fornecedores",
-            "pagamentosfornecedor"      => "Pagamentos a Fornecedores",
+            "pagamentodedespesasoperacionais" => "Pagamento de Despesas Operacionais",
+            "pagamentodetributos"       => "Pagamento de Tributos",
+            "aquisicaodeimobilizadocapex" => "Aquisição de Imobilizado (Capex)",
+            "captacaodeemprestimos"     => "Captação de Empréstimos",
+            "amortizacaodeemprestimos"  => "Amortização de Empréstimos",
+            "jurospagos"                => "Juros Pagos",
+            "saldoinicialdecaixa"       => "Saldo Inicial de Caixa",
+            "saldofinaldecaixa"         => "Saldo Final de Caixa",
             "caixaeequivalentes"        => "Caixa e Equivalentes",
-            "caixaeequivalentesdecaixa" => "Caixa e Equivalentes",
+            "caixaeequivalentesdecaixa" => "Caixa e Equivalentes de Caixa",
             "contasareceber"            => "Contas a Receber",
-            "contasareceberclientes"    => "Contas a Receber",
+            "contasareceberclientes"    => "Contas a Receber (Clientes)",
             "estoques"                  => "Estoques",
+            "impostosarecuperar"        => "Impostos a Recuperar",
+            "imobilizadobruto"          => "Imobilizado (Bruto)",
+            "depreciacaoacumulada"      => "Depreciação Acumulada",
+            "fornecedoresapagar"        => "Fornecedores a Pagar",
             "fornecedores"              => "Fornecedores",
+            "emprestimosefinanciamentoscirculante" => "Empréstimos e Financiamentos (Circulante)",
             "emprestimoscp"             => "Empréstimos CP",
+            "impostosarecolher"         => "Impostos a Recolher",
+            "salarioseencargosapagar"   => "Salários e Encargos a Pagar",
+            "emprestimosefinanciamentosnaocirculante" => "Empréstimos e Financiamentos (Não Circulante)",
             "emprestimoslp"             => "Empréstimos LP",
+            "capitalsocial"             => "Capital Social",
+            "lucrosacumulados"          => "Lucros Acumulados",
             "patrimonioliquido"         => "Patrimônio Líquido",
             "ingresosporproducto"       => "Receita Bruta",
             "ingresosporproductos"      => "Receita Bruta",
@@ -933,10 +960,16 @@ class DeParaMapper
             $label = "";
         }
 
-        if ($dest === PlanilhaImportacaoService::DEST_PERIODO) {
+        if ($dest === PlanilhaImportacaoService::DEST_CONTA) {
+            $campo["label"] = $label !== "" ? $label : "Conta (texto na linha)";
+            $campo["hint"] = "Nome da conta em cada linha da planilha. Obrigatório na matriz DRE/DFC/BP.";
+            $campo["exemplos"] = "Linha (R$) · Conta · Descrição da conta";
+            $campo["obrigatorio"] = true;
+            $campo["esperado"] = true;
+        } elseif ($dest === PlanilhaImportacaoService::DEST_PERIODO) {
             $campo["label"] = $label !== "" ? $label : "Data da venda";
-            $campo["hint"] = "Data em que a venda aconteceu. O sistema agrupa por mês. Obrigatório.";
-            $campo["exemplos"] = "Data da Venda · Fecha de venta";
+            $campo["hint"] = "Data em que a venda aconteceu. O sistema agrupa por mês. Preferir Data de criação do pedido. Obrigatório.";
+            $campo["exemplos"] = "Data de criação do pedido · Data da Venda · Fecha de venta";
             $campo["obrigatorio"] = true;
             $campo["esperado"] = true;
         } elseif ($dest === PlanilhaImportacaoService::DEST_DESCRICAO) {
@@ -1011,7 +1044,7 @@ TXT;
     {
         return in_array($n, [
             "conta", "contaplano", "nomedaconta", "descricaodaconta",
-            "classificacao", "rubrica",
+            "classificacao", "rubrica", "linha", "linhars", "linhadaconta",
         ], true) || (str_starts_with($n, "conta") && !str_contains($n, "contato") && !str_contains($n, "contas"));
     }
 

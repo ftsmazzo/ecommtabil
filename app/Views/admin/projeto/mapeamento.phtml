@@ -50,7 +50,10 @@ foreach ($camposModelo as $campo) {
 }
 
 $temData = array_key_exists("__periodo__", $campos);
-$podeProcessar = $temData && $temContaN;
+$temContaMatriz = array_key_exists("__conta__", $campos);
+$podeProcessar = $layoutAtual === "matriz"
+    ? ($temContaMatriz && $periodosMarcados !== [])
+    : ($temData && $temContaN);
 
 $renderSelect = function (string $destino) use ($colunas, $campos): void {
     $atual = array_key_exists($destino, $campos) ? (string) (int) $campos[$destino] : "";
@@ -196,7 +199,15 @@ $renderLinhaModelo = function (array $campo) use ($renderSelect, $campos): void 
     <?php endforeach ?>
 
     <div class="<?=$podeProcessar ? "alert alert-success" : "alert alert-warning"?> py-2 mb-3">
-        <?php if ($podeProcessar) : ?>
+        <?php if ($layoutAtual === "matriz") : ?>
+            <?php if ($podeProcessar) : ?>
+                Matriz pronta: coluna da <strong>conta</strong> e colunas de <strong>mês</strong> marcadas.
+                Linhas de fórmula (totais, EBITDA…) são ignoradas — só entram dados de entrada.
+            <?php else : ?>
+                Planilha matriz (conta × mês): escolha a coluna <strong>Linha / Conta</strong>
+                e marque os meses (Jan–Dez) abaixo.
+            <?php endif ?>
+        <?php elseif ($podeProcessar) : ?>
             Dá para processar: tem <strong>data</strong> e pelo menos uma <strong>conta de valor</strong>.
             Contas de despesa fixa (aluguel, folha, depreciação) vazias são normais em planilha de vendas.
         <?php else : ?>
@@ -208,6 +219,7 @@ $renderLinhaModelo = function (array $campo) use ($renderSelect, $campos): void 
         <?php endif ?>
     </div>
 
+    <?php if ($layoutAtual !== "matriz") : ?>
     <div class="card mb-3 border-primary-subtle" id="card-ia">
         <div class="card-body d-flex align-items-start gap-3">
             <div style="font-size:2rem;color:#6f42c1;line-height:1;flex-shrink:0">
@@ -225,6 +237,7 @@ $renderLinhaModelo = function (array $campo) use ($renderSelect, $campos): void 
             </div>
         </div>
     </div>
+    <?php endif ?>
 
     <div class="card mb-3">
         <div class="card-header d-flex align-items-center justify-content-between gap-3 flex-wrap">
@@ -270,18 +283,21 @@ $renderLinhaModelo = function (array $campo) use ($renderSelect, $campos): void 
     <input type="hidden" name="conta_padrao" value="<?=$contaPadrao > 0 ? (int) $contaPadrao : ""?>">
 
     <?php if ($mostrarMatriz) : ?>
-    <details class="card mb-3"<?=$periodosMarcados ? " open" : ""?>>
-        <summary class="card-header fw-semibold" style="cursor:pointer">
+    <div class="card mb-3 border-success-subtle">
+        <div class="card-header fw-semibold">
             Períodos nas colunas (matriz)
-            <span class="text-muted fw-normal small ms-1">— ignore no Mercado Livre / Shopee</span>
-        </summary>
+            <span class="text-muted fw-normal small ms-1">— Jan a Dez do demonstrativo</span>
+        </div>
         <div class="card-body">
-            <p class="campo-hint mb-2">Só planilha tipo SAGA com Ano 1 / 2024 nas colunas. Marketplace: não marque nada.</p>
+            <p class="campo-hint mb-2">Marque as colunas de mês. A coluna Total Ano fica de fora.</p>
             <?php
             $mapperUi = new \App\Services\Importacao\DeParaMapper();
             foreach ($colunas as $i => $col) :
                 $n = $mapperUi->normalizar((string) ($col["header"] ?? ""));
                 if (!$mapperUi->pareceCabecalhoPeriodo($n) && !in_array((int) $i, $periodosMarcados, true)) {
+                    continue;
+                }
+                if (str_starts_with($n, "total")) {
                     continue;
                 }
             ?>
@@ -294,7 +310,7 @@ $renderLinhaModelo = function (array $campo) use ($renderSelect, $campos): void 
             </div>
             <?php endforeach ?>
         </div>
-    </details>
+    </div>
     <?php endif ?>
 </form>
 
