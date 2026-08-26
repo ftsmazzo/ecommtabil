@@ -202,6 +202,28 @@ class DreConta extends Model
             return $iguais[0];
         }
 
+        // "Receita Bruta de Vendas" → conta "Receita Bruta" (match único pelo nome mais longo)
+        $parciais = [];
+        $melhorLen = 0;
+        foreach ($contas as $conta) {
+            $nn = $norm((string) ($conta->nome ?? ""));
+            if (strlen($nn) < 6) {
+                continue;
+            }
+            if ($nn === $nTexto || str_starts_with($nTexto, $nn) || str_contains($nTexto, $nn)) {
+                $len = strlen($nn);
+                if ($len > $melhorLen) {
+                    $parciais = [$conta];
+                    $melhorLen = $len;
+                } elseif ($len === $melhorLen) {
+                    $parciais[] = $conta;
+                }
+            }
+        }
+        if (count($parciais) === 1) {
+            return $parciais[0];
+        }
+
         return null;
     }
 

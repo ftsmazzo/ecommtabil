@@ -429,6 +429,7 @@ class ProjetoController extends ControllerAdmin
 
             $sheet   = $aberto["spreadsheet"]->getSheet($abaAtiva);
             $lido    = $svc->lerCabecalhos($sheet, 3);
+            $lido    = $svc->completarMatrizSemMeses($sheet, (string) ($sheetNames[$abaAtiva] ?? ""), $lido);
             $headers = $lido["headers"];
             $previews = $lido["previews"];
             $colunas = $svc->rotulosColunas($headers, $previews);
@@ -470,6 +471,10 @@ class ProjetoController extends ControllerAdmin
             }
             if (!isset($expandido["ano_base"])) {
                 $expandido["ano_base"] = (int) date("Y");
+            }
+            $nomeAbaAtiva = trim((string) ($sheetNames[$abaAtiva] ?? ""));
+            if (preg_match('/^(20\d{2})$/', $nomeAbaAtiva, $am)) {
+                $expandido["ano_base"] = (int) $am[1];
             }
             $layout = $layoutDetectado;
 
@@ -887,6 +892,11 @@ class ProjetoController extends ControllerAdmin
                 $aba      = (int) ($data->aba ?? 0);
                 $sheet    = $aberto["spreadsheet"]->getSheet($aba);
                 $lido     = $svc->lerCabecalhos($sheet, 3);
+                $lido     = $svc->completarMatrizSemMeses(
+                    $sheet,
+                    (string) ($aberto["sheetNames"][$aba] ?? ""),
+                    $lido
+                );
                 $headers  = $lido["headers"] ?: $headers;
                 $previews = $lido["previews"] ?? [];
             } catch (\Throwable $e) {

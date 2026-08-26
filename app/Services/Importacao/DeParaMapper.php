@@ -79,12 +79,6 @@ class DeParaMapper
 
         $alvos = [];
         $alvos[] = [
-            "dest"  => PlanilhaImportacaoService::DEST_PERIODO,
-            "tipo"  => "data",
-            "nomes" => ["datadavenda", "datavenda", "fechadeventa", "fechaventa", "datadecriacaodopedido", "datapagamentodopedido", "datapagamento", "data"],
-            "nao"   => ["prazo", "envio", "conclusao", "parcelamento"],
-        ];
-        $alvos[] = [
             "dest"  => PlanilhaImportacaoService::DEST_DESCRICAO,
             "tipo"  => "texto",
             "nomes" => ["titulodoanuncio", "titulodelapublicacion", "titulodapublicacion", "nomedoproduto", "nomedoitem", "nomeproduto", "descricaoml", "descricao"],
@@ -144,17 +138,24 @@ class DeParaMapper
             $usadas[$p["col"]] = true;
         }
 
-        if (!isset($campos[PlanilhaImportacaoService::DEST_PERIODO])) {
-            $candidatas = [];
-            foreach ($classes as $i => $col) {
-                if (isset($usadas[$i]) || $col["tipo"] !== "data") {
-                    continue;
-                }
-                $candidatas[] = (int) $i;
+        // Data: ranking próprio (pagamento/criação/venda). Nunca prevista de envio / prazo.
+        $melhorData = null;
+        $melhorNota = 0;
+        foreach ($classes as $i => $col) {
+            if (isset($usadas[$i])) {
+                continue;
             }
-            if (count($candidatas) === 1) {
-                $campos[PlanilhaImportacaoService::DEST_PERIODO] = $candidatas[0];
+            if ($col["tipo"] !== "data" && $col["tipo"] !== "vazio") {
+                continue;
             }
+            $nota = $this->notaPeriodo($col["n"]);
+            if ($nota > $melhorNota) {
+                $melhorNota = $nota;
+                $melhorData = (int) $i;
+            }
+        }
+        if ($melhorData !== null && $melhorNota >= 40) {
+            $campos[PlanilhaImportacaoService::DEST_PERIODO] = $melhorData;
         }
 
         return $campos;
@@ -173,6 +174,9 @@ class DeParaMapper
             $amostras = array_values(array_filter(array_map("strval", (array) ($previews[$indice] ?? []))));
             $tipoCol = $this->classificarColuna($n, $amostras);
             if (!$this->colunaServe($this->tipoEsperado((string) $dest), $tipoCol)) {
+                return false;
+            }
+            if ((string) $dest === PlanilhaImportacaoService::DEST_PERIODO && $this->notaPeriodo($n) < 40) {
                 return false;
             }
         }
@@ -670,17 +674,34 @@ class DeParaMapper
         if ($n === "") {
             return 0;
         }
-        if (str_contains($n, "prazodeenvio") || str_contains($n, "dataenvio") || str_contains($n, "datadeconclusao")) {
+        // Frete / prazo / conclusão: nunca viram competência do DRE.
+        if (
+            str_contains($n, "prevista")
+            || str_contains($n, "prazo")
+            || str_contains($n, "envio")
+            || str_contains($n, "conclusao")
+            || str_contains($n, "entreg")
+            || str_contains($n, "tempo")
+            || str_contains($n, "parcelamento")
+        ) {
             return 0;
         }
         if (str_contains($n, "datadavenda") || str_contains($n, "fechadeventa") || $n === "datavenda") {
             return 100;
         }
-        if (str_contains($n, "datapagamentodopedido") || str_contains($n, "datapagamento")) {
-            return 90;
+        if (
+            str_contains($n, "horadopagamento")
+            || str_contains($n, "datapagamentodopedido")
+            || str_contains($n, "datapagamento")
+            || str_contains($n, "pagamentodopedido")
+        ) {
+            return 95;
         }
         if (str_contains($n, "datadecriacaodopedido") || str_contains($n, "datadecriacao")) {
-            return 80;
+            return 90;
+        }
+        if ($n === "data" || $n === "fecha" || $n === "date" || $n === "periodo" || $n === "competencia") {
+            return 70;
         }
         if ($this->parecePeriodo($n)) {
             return 40;
@@ -713,8 +734,22 @@ class DeParaMapper
         return [
             "receitaporproduto"         => "Receita Bruta",
             "receitaporproductos"       => "Receita Bruta",
-            "receitabruta"              => "Receita Bruta",
             "receitabrutadevendas"      => "Receita Bruta",
+            "receitabruta"              => "Receita Bruta",
+            "devolucoesecancelamentos"  => "Cupons e Descontos",
+            "impostossobrevendas"       => "Deduções",
+            "recebimentosdeclientes"    => "Recebimentos de Clientes",
+            "pagamentosfornecedores"    => "Pagamentos a Fornecedores",
+            "pagamentosfornecedor"      => "Pagamentos a Fornecedores",
+            "caixaeequivalentes"        => "Caixa e Equivalentes",
+            "caixaeequivalentesdecaixa" => "Caixa e Equivalentes",
+            "contasareceber"            => "Contas a Receber",
+            "contasareceberclientes"    => "Contas a Receber",
+            "estoques"                  => "Estoques",
+            "fornecedores"              => "Fornecedores",
+            "emprestimoscp"             => "Empréstimos CP",
+            "emprestimoslp"             => "Empréstimos LP",
+            "patrimonioliquido"         => "Patrimônio Líquido",
             "ingresosporproducto"       => "Receita Bruta",
             "ingresosporproductos"      => "Receita Bruta",
             "ingresoporproducto"        => "Receita Bruta",

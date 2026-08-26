@@ -108,7 +108,7 @@ class OrigemClassificador
         foreach ($headers as $h) {
             $parts[] = $this->n((string) $h);
         }
-        return hash("sha256", "v4\n" . implode("\n", $parts));
+        return hash("sha256", "v5\n" . implode("\n", $parts));
     }
 
     public function n(string $t): string

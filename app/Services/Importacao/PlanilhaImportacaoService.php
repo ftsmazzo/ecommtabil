@@ -83,18 +83,101 @@ class PlanilhaImportacaoService
     }
 
     /**
+     * DFC do cliente: aba = ano, meses só por posição (sem linha Jan–Dez).
+     * Se a planilha parece isso, inventa cabeçalhos Jan…Dez e aponta a 1ª linha de dados.
+     *
+     * @param array{headers:array,previews:array,highestRow:int,highestCol:int,linhaCabecalho:int} $info
+     * @return array{headers:array,previews:array,highestRow:int,highestCol:int,linhaCabecalho:int}
+     */
+    public function completarMatrizSemMeses(Worksheet $sheet, string $nomeAba, array $info): array
+    {
+        $headers = $info["headers"];
+        $mesesTok = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+        $mesesAchados = 0;
+        foreach ($headers as $h) {
+            $n = $this->normalizar((string) $h);
+            foreach ($mesesTok as $m) {
+                if ($n === $m || str_starts_with($n, $m)) {
+                    $mesesAchados++;
+                    break;
+                }
+            }
+        }
+        if ($mesesAchados >= 6) {
+            return $info;
+        }
+
+        $ano = null;
+        if (preg_match('/^(20\d{2})$/', trim($nomeAba), $m)) {
+            $ano = (int) $m[1];
+        }
+        if ($ano === null) {
+            return $info;
+        }
+
+        $highestCol = (int) $info["highestCol"];
+        $highestRow = (int) $info["highestRow"];
+        $inicio = null;
+        for ($r = 1; $r <= min(12, $highestRow); $r++) {
+            $nums = 0;
+            $primeiro = trim((string) $this->celula($sheet, $r, 1, false));
+            if ($primeiro === "" || preg_match('/^-?\d/', $primeiro)) {
+                continue;
+            }
+            for ($c = 2; $c <= min(13, $highestCol); $c++) {
+                $v = trim((string) $this->celula($sheet, $r, $c, false));
+                if ($v !== "" && preg_match('/^-?\d/', $v)) {
+                    $nums++;
+                }
+            }
+            if ($nums >= 6) {
+                $inicio = $r;
+                break;
+            }
+        }
+        if ($inicio === null) {
+            return $info;
+        }
+
+        $rotulos = ["Linha (R$)", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+        $novos = [];
+        for ($c = 0; $c < $highestCol; $c++) {
+            if ($c < count($rotulos)) {
+                $novos[$c] = $rotulos[$c];
+            } elseif ($c === 13) {
+                $novos[$c] = "Total Ano";
+            } else {
+                $novos[$c] = "Coluna " . Coordinate::stringFromColumnIndex($c + 1);
+            }
+        }
+
+        $info["headers"] = $novos;
+        $info["linhaCabecalho"] = $inicio - 1;
+        if ($info["linhaCabecalho"] < 1) {
+            $info["linhaCabecalho"] = 1;
+        }
+        $info["previews"] = [];
+        foreach ($novos as $i => $_) {
+            $info["previews"][$i] = [];
+        }
+        return $info;
+    }
+
+    /**
      * Planilhas do Mercado Livre / Shopee costumam ter título ou filtros nas primeiras linhas.
      */
     public function detectarLinhaCabecalho(Worksheet $sheet, int $highestCol, int $highestRow): int
     {
-        $limite = min(15, max(1, $highestRow));
+        $limite = min(20, max(1, $highestRow));
         $melhor = 1;
         $melhorScore = -1;
+        $meses = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
         for ($r = 1; $r <= $limite; $r++) {
             $texto = 0;
             $numero = 0;
             $bonus = 0;
+            $mesesNaLinha = 0;
             for ($c = 1; $c <= $highestCol; $c++) {
                 $val = trim((string) $this->celula($sheet, $r, $c, false));
                 if ($val === "") {
@@ -109,6 +192,16 @@ class PlanilhaImportacaoService
                     continue;
                 }
                 $texto++;
+                foreach ($meses as $m) {
+                    if ($n === $m || str_starts_with($n, $m)) {
+                        $mesesNaLinha++;
+                        $bonus += 8;
+                        break;
+                    }
+                }
+                if ($n === "linhars" || $n === "linha" || str_starts_with($n, "linha")) {
+                    $bonus += 6;
+                }
                 if (
                     $this->parecePeriodo($n) || $this->pareceValor($n) || $this->pareceDescricao($n)
                     || $this->pareceConta($n) || $this->pareceUnidade($n)
@@ -119,10 +212,13 @@ class PlanilhaImportacaoService
                     $bonus += 2;
                 }
             }
-            if ($texto < 2) {
+            if ($texto < 2 && $mesesNaLinha < 3) {
                 continue;
             }
             $score = ($texto * 2) + $bonus - $numero;
+            if ($mesesNaLinha >= 6) {
+                $score += 40;
+            }
             if ($score > $melhorScore) {
                 $melhorScore = $score;
                 $melhor = $r;
@@ -596,6 +692,8 @@ class PlanilhaImportacaoService
         $aberto = $this->abrir($caminho);
         $sheet  = $aberto["spreadsheet"]->getSheet($aba);
         $info   = $this->lerCabecalhos($sheet, 0);
+        $nomeAba = (string) ($aberto["sheetNames"][$aba] ?? "");
+        $info   = $this->completarMatrizSemMeses($sheet, $nomeAba, $info);
         $headers = $info["headers"];
         $highestRow = max(2, $info["highestRow"]);
         $highestCol = $info["highestCol"];
@@ -941,9 +1039,7 @@ class PlanilhaImportacaoService
                 }
             }
 
-            $periodo = $colPeriodo !== null
-                ? $this->parsePeriodo((string) $this->celulaDaLinha($linha, $colPeriodo), (string) ($headers[$colPeriodo] ?? ""))
-                : null;
+            $periodo = $this->periodoDaLinha($linha, $colPeriodo, $headers, $mapa);
 
             $rotulo = trim((string) ($conta->codigo ?? "") . " — " . (string) ($conta->nome ?? $nomeConta));
 
@@ -1006,12 +1102,20 @@ class PlanilhaImportacaoService
             }
 
             $nomeConta = trim((string) $this->celulaDaLinha($linha, $colConta));
+            $nomeConta = $this->limparNomeContaMatriz($nomeConta);
             if ($nomeConta === "" || $this->pareceLinhaResumo($nomeConta)) {
                 $ignorados++;
                 continue;
             }
 
             $conta = DreConta::buscarAnaliticaPorTexto($tipo, $nomeConta);
+            if (!$conta) {
+                $alias = (new DeParaMapper())->aliasParaConta($this->normalizar($nomeConta))
+                    ?? (new DeParaMapper())->aliasPorFragmento($this->normalizar($nomeConta));
+                if ($alias) {
+                    $conta = DreConta::buscarAnaliticaPorTexto($tipo, $alias);
+                }
+            }
             if (!$conta) {
                 $naoAcharam[$nomeConta] = true;
                 $ignorados++;
@@ -1088,9 +1192,7 @@ class PlanilhaImportacaoService
                 continue;
             }
 
-            $periodo = $colPeriodo !== null
-                ? $this->parsePeriodo((string) $this->celulaDaLinha($linha, $colPeriodo), (string) ($headers[$colPeriodo] ?? ""))
-                : null;
+            $periodo = $this->periodoDaLinha($linha, $colPeriodo, $headers, $mapa);
             $descricao = $colDesc !== null ? $this->textoOuNulo($this->celulaDaLinha($linha, $colDesc)) : null;
             $unidade   = $colUnid !== null ? $this->textoOuNulo($this->celulaDaLinha($linha, $colUnid)) : null;
 
@@ -1172,10 +1274,62 @@ class PlanilhaImportacaoService
         return $this->parsePeriodo($header, $header);
     }
 
+    private function periodoDaLinha(array $linha, ?int $colPeriodo, array $headers, array $mapa): ?string
+    {
+        $mapper = new DeParaMapper();
+        $candidatas = [];
+        if ($colPeriodo !== null) {
+            $candidatas[] = (int) $colPeriodo;
+        }
+        foreach ($headers as $i => $h) {
+            $i = (int) $i;
+            if ($colPeriodo !== null && $i === (int) $colPeriodo) {
+                continue;
+            }
+            $n = $mapper->chaveCabecalho((string) $h);
+            if ($mapper->notaPeriodo($n) < 40) {
+                continue;
+            }
+            $candidatas[] = $i;
+        }
+        $candidatas = array_values(array_unique($candidatas));
+        usort($candidatas, static function ($a, $b) use ($headers, $mapper) {
+            return $mapper->notaPeriodo($mapper->chaveCabecalho((string) ($headers[$b] ?? "")))
+                <=> $mapper->notaPeriodo($mapper->chaveCabecalho((string) ($headers[$a] ?? "")));
+        });
+
+        foreach ($candidatas as $col) {
+            $raw = trim((string) $this->celulaDaLinha($linha, $col));
+            if ($raw === "" || $raw === "-" || $raw === "—") {
+                continue;
+            }
+            $parsed = $this->parsePeriodo($raw, "");
+            if ($parsed !== null) {
+                return $parsed;
+            }
+        }
+        return null;
+    }
+
+    private function limparNomeContaMatriz(string $nome): string
+    {
+        $nome = trim($nome);
+        $nome = preg_replace('/^\([+\-=]\)\s*/u', "", $nome) ?? $nome;
+        $nome = preg_replace('/^[+\-=]\s*/u', "", $nome) ?? $nome;
+        return trim($nome);
+    }
+
     private function pareceLinhaResumo(string $nome): bool
     {
         $n = $this->normalizar($nome);
-        return in_array($n, ["total", "totais", "subtotal", "soma", "somageral"], true);
+        return in_array($n, [
+            "total", "totais", "subtotal", "soma", "somageral", "totalano",
+            "ativo", "passivo", "patrimonioliquido", "ativocirculante", "passivocirculante",
+            "ativonao", "passivonao", "diferenca", "diferencadeveserzero",
+        ], true)
+            || str_starts_with($n, "total")
+            || str_starts_with($n, "subtotal")
+            || str_contains($n, "deveserzero");
     }
 
     private function gravarLancamento(
