@@ -345,6 +345,24 @@ class ProjetoCaixaController extends ControllerAdmin
         $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
     }
 
+    public function zerarMontagens(Request $request): void
+    {
+        $this->authorize("projeto_gerenciar");
+
+        $projeto = $this->carregarProjeto($request, true);
+        if (!$projeto) {
+            return;
+        }
+
+        $n = (new CaixaSessaoService())->zerarProjeto((int) $projeto->id);
+        if ($n < 1) {
+            $this->message->info("Não havia montagens para apagar.");
+        } else {
+            $this->message->success("Apaguei {$n} montagem(ns). Pode começar do zero.");
+        }
+        $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+    }
+
     private function acaoMovimento(Request $request, string $acao): void
     {
         $projeto = $this->carregarProjeto($request, true);

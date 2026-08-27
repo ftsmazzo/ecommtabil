@@ -153,6 +153,7 @@ $router->namespace("\App\Controllers\Admin")->group(null);
     $router->get("/projetos/{id}/caixa", "ProjetoCaixaController:index", "admin.projeto.caixa");
     $router->post("/projetos/{id}/caixa/extrato", "ProjetoCaixaController:uploadExtrato", "admin.projeto.caixa.upload");
     $router->post("/projetos/{id}/caixa/arquivar", "ProjetoCaixaController:arquivarSessao", "admin.projeto.caixa.arquivar");
+    $router->post("/projetos/{id}/caixa/zerar", "ProjetoCaixaController:zerarMontagens", "admin.projeto.caixa.zerar");
     $router->post("/projetos/{id}/caixa/classificar", "ProjetoCaixaController:classificar", "admin.projeto.caixa.classificar");
     $router->post("/projetos/{id}/caixa/recibos", "ProjetoCaixaController:uploadRecibos", "admin.projeto.caixa.recibos");
     $router->post("/projetos/{id}/caixa/aprovar", "ProjetoCaixaController:aprovar", "admin.projeto.caixa.aprovar");

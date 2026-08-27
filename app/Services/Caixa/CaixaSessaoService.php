@@ -124,4 +124,54 @@ class CaixaSessaoService
             ->where("id_projeto", "=", $idProjeto)
             ->update(["trash" => 1, "status" => "cancelada"]);
     }
+
+    /**
+     * Apaga de verdade todas as montagens do projeto (sessões, movimentos, recibos e vínculos).
+     */
+    public function zerarProjeto(int $idProjeto): int
+    {
+        $ids = DB::table("caixa_sessao")
+            ->select(["id"])
+            ->where("id_projeto", "=", $idProjeto)
+            ->get();
+
+        $sessaoIds = [];
+        foreach ($ids as $row) {
+            $sessaoIds[] = (int) $row->id;
+        }
+        if ($sessaoIds === []) {
+            return 0;
+        }
+
+        $movIds = [];
+        $movs = DB::table("caixa_movimento")
+            ->select(["id"])
+            ->whereIn("id_sessao", $sessaoIds)
+            ->get();
+        foreach ($movs as $m) {
+            $movIds[] = (int) $m->id;
+        }
+
+        if ($movIds !== []) {
+            DB::table("caixa_vinculo")->whereIn("id_movimento", $movIds)->delete();
+        }
+
+        $recIds = [];
+        $recs = DB::table("caixa_recibo")
+            ->select(["id"])
+            ->whereIn("id_sessao", $sessaoIds)
+            ->get();
+        foreach ($recs as $r) {
+            $recIds[] = (int) $r->id;
+        }
+        if ($recIds !== []) {
+            DB::table("caixa_vinculo")->whereIn("id_recibo", $recIds)->delete();
+        }
+
+        DB::table("caixa_recibo")->whereIn("id_sessao", $sessaoIds)->delete();
+        DB::table("caixa_movimento")->whereIn("id_sessao", $sessaoIds)->delete();
+        DB::table("caixa_sessao")->where("id_projeto", "=", $idProjeto)->delete();
+
+        return count($sessaoIds);
+    }
 }
