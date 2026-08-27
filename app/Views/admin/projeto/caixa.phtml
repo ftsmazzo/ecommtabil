@@ -63,13 +63,15 @@ $pendRec = (int)(($cf["recibos_sem_vinculo"] ?? 0));
 
 <div class="caixa-bar">
     <?php
-        $r = $resumo ?? null;
-        $totMov = (int)($cf["movimentos"] ?? ($r->total ?? 0));
-        $totApr = (int)($cf["aprovados"] ?? ($r->aprovado ?? 0));
-        $totIgn = (int)($cf["ignorados"] ?? ($r->ignorado ?? 0));
-        $totPend = (int)($cf["pendentes"] ?? max(0, $totMov - $totApr - $totIgn));
-        $totCred = (float)($cf["creditos"] ?? ($r->creditos ?? 0));
-        $totDeb = (float)($cf["debitos"] ?? ($r->debitos ?? 0));
+        $tb = $totaisBarra ?? [];
+        $cf = $conferencia ?? [];
+        $totMov = (int)($tb["movimentos"] ?? $cf["movimentos"] ?? 0);
+        $totApr = (int)($tb["aprovados"] ?? $cf["aprovados"] ?? 0);
+        $totIgn = (int)($tb["ignorados"] ?? $cf["ignorados"] ?? 0);
+        $totPend = (int)($tb["pendentes"] ?? $cf["pendentes"] ?? max(0, $totMov - $totApr - $totIgn));
+        $totCred = (float)($tb["creditos"] ?? $cf["creditos"] ?? 0);
+        $totDeb = (float)($tb["debitos"] ?? $cf["debitos"] ?? 0);
+        $podeGerar = $totApr > 0 && $totPend === 0;
     ?>
     <div><span class="text-muted">Lançamentos</span><br><strong><?=$totMov?></strong></div>
     <div><span class="text-muted">Pendentes</span><br><strong class="text-warning"><?=$totPend?></strong></div>
@@ -256,7 +258,13 @@ $pendRec = (int)(($cf["recibos_sem_vinculo"] ?? 0));
             </thead>
             <tbody>
             <?php if (!$movimentos) : ?>
-                <tr><td colspan="8" class="text-center text-muted py-4">Nada neste filtro — pode avançar.</td></tr>
+                <tr><td colspan="8" class="text-center text-muted py-4">
+                    <?php if ($filtro === "pendentes" && $totApr > 0) : ?>
+                        Tudo aprovado nesta fila.
+                    <?php else : ?>
+                        Nada neste filtro.
+                    <?php endif ?>
+                </td></tr>
             <?php endif ?>
             <?php foreach ($movimentos as $m) : ?>
                 <?php
@@ -373,6 +381,48 @@ $pendRec = (int)(($cf["recibos_sem_vinculo"] ?? 0));
         </table>
     </div>
 </div>
+
+<?php if (($totApr > 0) || ($totPend === 0 && $totMov > 0)) : ?>
+<div class="alert <?=$totApr > 0 ? "alert-success" : "alert-warning"?> border-0 mt-3 mb-2">
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        <div class="me-auto">
+            <?php if ($totApr > 0) : ?>
+                <div class="fw-semibold">Fechar montagem → Gerar DFC</div>
+                <div class="small mb-0">
+                    <?=$totApr?> aprovado(s)<?=$totPend > 0 ? " · ainda há {$totPend} pendente(s)" : ""?>.
+                    Grava no projeto e abre a visão geral.
+                    <?php if ($pendRec > 0) : ?>
+                        <span class="text-muted">Comprovantes sem vínculo não bloqueiam.</span>
+                    <?php endif ?>
+                </div>
+            <?php else : ?>
+                <div class="fw-semibold">Sem aprovados ainda</div>
+                <div class="small mb-0">Aprove os lançamentos (ou “Aprovar todos com conta”) para liberar o fechamento.</div>
+            <?php endif ?>
+        </div>
+        <?php if ($totApr > 0) : ?>
+        <form action="<?=$router->route("admin.projeto.caixa.gerar_dfc", ["id" => $projeto->id])?>" method="POST"
+              onsubmit="return confirm('Gerar o DFC no projeto com <?=$totApr?> lançamento(s) aprovado(s)?<?=$totPend > 0 ? " Os pendentes NÃO entram." : ""?>');">
+            <input type="hidden" name="csrf" value="<?=$csrf?>">
+            <input type="hidden" name="sessao_id" value="<?=(int)$sessao->id?>">
+            <button type="submit" class="btn btn-success btn-lg">
+                Gerar DFC e ir ao projeto
+            </button>
+        </form>
+        <?php endif ?>
+        <a href="<?=$router->route("admin.projeto.abrir", ["id" => $projeto->id])?>" class="btn btn-outline-secondary">
+            Voltar à visão geral
+        </a>
+    </div>
+</div>
+<?php elseif ($sessao) : ?>
+<div class="alert alert-light border mt-3 mb-2">
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        <div class="me-auto small text-muted">Quando houver lançamentos aprovados, o botão <strong>Gerar DFC</strong> aparece aqui.</div>
+        <a href="<?=$router->route("admin.projeto.abrir", ["id" => $projeto->id])?>" class="btn btn-outline-secondary btn-sm">Visão geral do projeto</a>
+    </div>
+</div>
+<?php endif ?>
 
 <div class="mt-2 d-flex gap-2">
     <form action="<?=$router->route("admin.projeto.caixa.arquivar", ["id"=>$projeto->id])?>" method="POST"

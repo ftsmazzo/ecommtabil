@@ -166,6 +166,7 @@ $router->namespace("\App\Controllers\Admin")->group(null);
     $router->post("/projetos/{id}/caixa/editar", "ProjetoCaixaController:editar", "admin.projeto.caixa.editar");
     $router->post("/projetos/{id}/caixa/aprovar-altas", "ProjetoCaixaController:aprovarAltas", "admin.projeto.caixa.aprovar_altas");
     $router->post("/projetos/{id}/caixa/aprovar-sugeridos", "ProjetoCaixaController:aprovarSugeridosMov", "admin.projeto.caixa.aprovar_sugeridos");
+    $router->post("/projetos/{id}/caixa/gerar-dfc", "ProjetoCaixaController:gerarDfc", "admin.projeto.caixa.gerar_dfc");
 
     // EMPRESAS
     $router->get("/empresas", "EmpresaController:index", "admin.empresa.index");

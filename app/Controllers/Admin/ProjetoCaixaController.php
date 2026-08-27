@@ -14,6 +14,7 @@ use App\Models\Empresa;
 use App\Models\Projeto;
 use App\Services\Caixa\CaixaClassificadorService;
 use App\Services\Caixa\CaixaConferenciaService;
+use App\Services\Caixa\CaixaGerarDfcService;
 use App\Services\Caixa\CaixaReciboService;
 use App\Services\Caixa\CaixaSessaoService;
 use App\Services\Caixa\DfcGrupoResolver;
@@ -52,6 +53,7 @@ class ProjetoCaixaController extends ControllerAdmin
         $vinculosPorRec = [];
         $conferencia = null;
         $recibosTodos = [];
+        $totaisBarra = null;
         $filtro = "pendentes";
         $faixa = "";
         $filtroRecibo = "pendentes";
@@ -101,6 +103,37 @@ class ProjetoCaixaController extends ControllerAdmin
             $vinculosPorMov = $this->vinculosPorMovimento((int) $sessao->id);
             $vinculosPorRec = $this->vinculosPorRecibo($vinculosPorMov);
             $conferencia = (new CaixaReciboService())->conferencia((int) $sessao->id);
+
+            // Totais da barra: sempre a partir dos movimentos da sessão (não depende só de conferencia)
+            $totaisBarra = [
+                "movimentos" => count($movimentosTodos),
+                "aprovados"  => 0,
+                "pendentes"  => 0,
+                "ignorados"  => 0,
+                "creditos"   => 0.0,
+                "debitos"    => 0.0,
+            ];
+            foreach ($movimentosTodos as $mx) {
+                $st = (string) ($mx->status ?? "");
+                $v = (float) ($mx->valor ?? 0);
+                if ($st === "aprovado") {
+                    $totaisBarra["aprovados"]++;
+                } elseif ($st === "ignorado") {
+                    $totaisBarra["ignorados"]++;
+                } else {
+                    $totaisBarra["pendentes"]++;
+                }
+                if ($v > 0) {
+                    $totaisBarra["creditos"] += $v;
+                } else {
+                    $totaisBarra["debitos"] += $v;
+                }
+            }
+            // Se a lista veio vazia mas a sessão diz que tem movimentos, recalcula no SQL
+            if ($totaisBarra["movimentos"] === 0 && (int) ($sessao->total_movimentos ?? 0) > 0) {
+                $totaisBarra = array_merge($totaisBarra, (new CaixaReciboService())->conferencia((int) $sessao->id));
+                $totaisBarra["movimentos"] = (int) ($totaisBarra["movimentos"] ?? 0);
+            }
 
             if ($filtro === "sem_recibo") {
                 $movimentos = array_values(array_filter(
@@ -186,6 +219,7 @@ class ProjetoCaixaController extends ControllerAdmin
             "vinculosPorMov"  => $vinculosPorMov,
             "vinculosPorRec"  => $vinculosPorRec,
             "conferencia"     => $conferencia,
+            "totaisBarra"     => $totaisBarra,
             "contas"          => $contas,
             "contasMap"       => $contasMap,
             "contasPorGrupo"  => $contasPorGrupo,
@@ -480,6 +514,39 @@ class ProjetoCaixaController extends ControllerAdmin
             $this->message->success("Apaguei {$n} montagem(ns). Pode começar do zero.");
         }
         $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+    }
+
+    public function gerarDfc(Request $request): void
+    {
+        $this->authorize("projeto_gerenciar");
+        $projeto = $this->carregarProjeto($request, true);
+        if (!$projeto) {
+            return;
+        }
+
+        $data = new Data($request->all());
+        $sessao = CaixaSessao::findAtiva((int) ($data->sessao_id ?? 0), (int) $projeto->id);
+        if (!$sessao) {
+            $this->message->warning("Sessão inválida.");
+            $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+            return;
+        }
+
+        try {
+            $out = (new CaixaGerarDfcService())->gerar(
+                (int) $sessao->id,
+                (int) $projeto->id,
+                (int) ($this->user->uid ?? 0)
+            );
+            $this->message->success(
+                "DFC gerado: {$out["gravados"]} lançamentos gravados no projeto"
+                . " (R$ " . number_format($out["valor_total"], 2, ",", ".") . ")."
+            );
+            $this->router->redirect("admin.projeto.abrir", ["id" => $projeto->id]);
+        } catch (\Throwable $e) {
+            $this->message->error($e->getMessage());
+            $this->redirectCaixa((int) $projeto->id, (int) $sessao->id, $request->all(), ["status" => "aprovado"]);
+        }
     }
 
     public function vincularRecibo(Request $request): void
