@@ -153,6 +153,12 @@ $router->namespace("\App\Controllers\Admin")->group(null);
     $router->get("/projetos/{id}/caixa", "ProjetoCaixaController:index", "admin.projeto.caixa");
     $router->post("/projetos/{id}/caixa/extrato", "ProjetoCaixaController:uploadExtrato", "admin.projeto.caixa.upload");
     $router->post("/projetos/{id}/caixa/arquivar", "ProjetoCaixaController:arquivarSessao", "admin.projeto.caixa.arquivar");
+    $router->post("/projetos/{id}/caixa/classificar", "ProjetoCaixaController:classificar", "admin.projeto.caixa.classificar");
+    $router->post("/projetos/{id}/caixa/recibos", "ProjetoCaixaController:uploadRecibos", "admin.projeto.caixa.recibos");
+    $router->post("/projetos/{id}/caixa/aprovar", "ProjetoCaixaController:aprovar", "admin.projeto.caixa.aprovar");
+    $router->post("/projetos/{id}/caixa/ignorar", "ProjetoCaixaController:ignorar", "admin.projeto.caixa.ignorar");
+    $router->post("/projetos/{id}/caixa/editar", "ProjetoCaixaController:editar", "admin.projeto.caixa.editar");
+    $router->post("/projetos/{id}/caixa/aprovar-altas", "ProjetoCaixaController:aprovarAltas", "admin.projeto.caixa.aprovar_altas");
 
     // EMPRESAS
     $router->get("/empresas", "EmpresaController:index", "admin.empresa.index");
