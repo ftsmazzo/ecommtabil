@@ -45,7 +45,8 @@
         "phpoffice/phpspreadsheet": "dev-master",
         "dompdf/dompdf": "dev-master",
         "tecnickcom/tcpdf": "dev-main",
-        "openai-php/client": "dev-main"
+        "openai-php/client": "dev-main",
+        "smalot/pdfparser": "^2.0"
     },
     "require-dev": {
         "matthiasmullie/minify": "^1.3",

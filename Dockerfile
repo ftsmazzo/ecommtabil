@@ -29,7 +29,8 @@ WORKDIR /var/www/html
 
 COPY composer.json composer.lock ./
 RUN composer install --no-dev --prefer-dist --no-interaction --no-scripts --optimize-autoloader \
-    || composer install --no-dev --prefer-dist --no-interaction --no-scripts --optimize-autoloader --ignore-platform-reqs
+    || composer install --no-dev --prefer-dist --no-interaction --no-scripts --optimize-autoloader --ignore-platform-reqs \
+    && composer require smalot/pdfparser:^2.0 --no-dev --no-interaction --update-with-all-dependencies
 
 COPY . .
 

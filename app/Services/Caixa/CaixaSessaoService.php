@@ -3,36 +3,64 @@
 namespace App\Services\Caixa;
 
 use App\Core\DB;
-use App\Models\CaixaMovimento;
 use App\Models\CaixaSessao;
 
 class CaixaSessaoService
 {
-    private OfxParser $parser;
+    private OfxParser $ofxParser;
+    private ExtratoPdfParser $pdfParser;
 
-    public function __construct(?OfxParser $parser = null)
+    public function __construct(?OfxParser $ofxParser = null, ?ExtratoPdfParser $pdfParser = null)
     {
-        $this->parser = $parser ?? new OfxParser();
+        $this->ofxParser = $ofxParser ?? new OfxParser();
+        $this->pdfParser = $pdfParser ?? new ExtratoPdfParser();
     }
 
     /**
-     * Cria sessão a partir do OFX e grava movimentos.
+     * Detecta OFX ou PDF de extrato e cria sessão + movimentos.
      *
-     * @return array{sessao:CaixaSessao, total:int}
+     * @return array{sessao:CaixaSessao, total:int, formato:string}
      */
+    public function criarDeArquivo(int $idProjeto, string $caminhoArquivo, string $nomeOriginal, string $nomeSalvo): array
+    {
+        $ext = strtolower(pathinfo($nomeOriginal, PATHINFO_EXTENSION));
+        if ($ext === "pdf" || strtolower(pathinfo($caminhoArquivo, PATHINFO_EXTENSION)) === "pdf") {
+            $parsed = $this->pdfParser->parseFile($caminhoArquivo);
+            $formato = "pdf";
+        } else {
+            $parsed = $this->ofxParser->parseFile($caminhoArquivo);
+            $formato = "ofx";
+        }
+
+        return array_merge(
+            $this->persistirParsed($idProjeto, $parsed, $nomeOriginal, $nomeSalvo),
+            ["formato" => $formato]
+        );
+    }
+
+    /** @deprecated use criarDeArquivo */
     public function criarDeOfx(int $idProjeto, string $caminhoArquivo, string $nomeOriginal, string $nomeSalvo): array
     {
-        $parsed = $this->parser->parseFile($caminhoArquivo);
+        $r = $this->criarDeArquivo($idProjeto, $caminhoArquivo, $nomeOriginal, $nomeSalvo);
+        unset($r["formato"]);
+        return $r;
+    }
 
+    /**
+     * @param array<string,mixed> $parsed
+     * @return array{sessao:CaixaSessao, total:int}
+     */
+    private function persistirParsed(int $idProjeto, array $parsed, string $nomeOriginal, string $nomeSalvo): array
+    {
         $ins = DB::table("caixa_sessao")->insert([
             "id_projeto"        => $idProjeto,
             "periodo_inicio"    => $parsed["periodo_inicio"],
             "periodo_fim"       => $parsed["periodo_fim"],
             "status"            => "em_conferencia",
-            "banco_nome"        => $parsed["banco_nome"],
-            "banco_id"          => $parsed["banco_id"],
-            "agencia"           => $parsed["agencia"],
-            "conta"             => $parsed["conta"],
+            "banco_nome"        => $parsed["banco_nome"] ?? null,
+            "banco_id"          => $parsed["banco_id"] ?? null,
+            "agencia"           => $parsed["agencia"] ?? null,
+            "conta"             => $parsed["conta"] ?? null,
             "arquivo_extrato"   => $nomeSalvo,
             "arquivo_original"  => $nomeOriginal,
             "total_movimentos"  => 0,
@@ -45,18 +73,9 @@ class CaixaSessaoService
         }
 
         $cols = [
-            "id_sessao",
-            "fitid",
-            "data_posted",
-            "tipo",
-            "valor",
-            "memo",
-            "id_dre_conta",
-            "confianca_conta",
-            "motivo_conta",
-            "status",
-            "id_lancamento",
-            "trash",
+            "id_sessao", "fitid", "data_posted", "tipo", "valor", "memo",
+            "id_dre_conta", "confianca_conta", "motivo_conta", "grupo_dfc",
+            "status", "id_lancamento", "trash",
         ];
 
         $rows = [];
@@ -76,6 +95,7 @@ class CaixaSessaoService
                 $m["memo"],
                 null,
                 0,
+                null,
                 null,
                 "novo",
                 null,

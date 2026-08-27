@@ -16,6 +16,7 @@ use App\Services\Caixa\CaixaClassificadorService;
 use App\Services\Caixa\CaixaConferenciaService;
 use App\Services\Caixa\CaixaReciboService;
 use App\Services\Caixa\CaixaSessaoService;
+use App\Services\Caixa\DfcGrupoResolver;
 
 class ProjetoCaixaController extends ControllerAdmin
 {
@@ -38,7 +39,7 @@ class ProjetoCaixaController extends ControllerAdmin
             return;
         }
 
-        DreConta::garantirPlanoSagaPadrao("dfc");
+        DfcGrupoResolver::garantirPlanoComGrupos();
 
         $sessoes = CaixaSessao::ativasPorProjeto((int) $projeto->id);
         $sessaoId = (int) (($request->all()["sessao"] ?? 0));
@@ -129,14 +130,14 @@ class ProjetoCaixaController extends ControllerAdmin
 
         $file = $_FILES["arquivo"] ?? null;
         if (!$file || ($file["error"] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-            $this->message->warning("Envie um arquivo OFX do extrato bancário.");
+            $this->message->warning("Envie um arquivo OFX ou PDF do extrato bancário.");
             $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
             return;
         }
 
         $ext = strtolower(pathinfo((string) $file["name"], PATHINFO_EXTENSION));
-        if ($ext !== "ofx") {
-            $this->message->warning("Por enquanto só aceitamos extrato em OFX.");
+        if (!in_array($ext, ["ofx", "pdf"], true)) {
+            $this->message->warning("Formato inválido. Envie extrato em OFX ou PDF.");
             $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
             return;
         }
@@ -146,7 +147,7 @@ class ProjetoCaixaController extends ControllerAdmin
             mkdir($dir, 0755, true);
         }
 
-        $nomeSalvo = "proj_{$projeto->id}_" . time() . "_" . uniqid() . ".ofx";
+        $nomeSalvo = "proj_{$projeto->id}_" . time() . "_" . uniqid() . "." . $ext;
         $destino   = $dir . $nomeSalvo;
 
         if (!move_uploaded_file((string) $file["tmp_name"], $destino)) {
@@ -157,12 +158,13 @@ class ProjetoCaixaController extends ControllerAdmin
 
         try {
             $svc = new CaixaSessaoService();
-            $out = $svc->criarDeOfx(
+            $out = $svc->criarDeArquivo(
                 (int) $projeto->id,
                 $destino,
                 (string) $file["name"],
                 $nomeSalvo
             );
+            $fmt = strtoupper((string) ($out["formato"] ?? "ofx"));
 
             $cls = (new CaixaClassificadorService())->classificarSessao(
                 (int) $out["sessao"]->id,
@@ -171,7 +173,7 @@ class ProjetoCaixaController extends ControllerAdmin
                 true
             );
 
-            $msg = "Extrato lido: {$out["total"]} movimentos. Classificados: {$cls["atualizados"]}";
+            $msg = "Extrato {$fmt} lido: {$out["total"]} movimentos. Classificados: {$cls["atualizados"]}";
             $msg .= " (memória {$cls["por_memoria"]}, regras {$cls["por_regra"]}, IA {$cls["por_ia"]}).";
             $this->message->success($msg);
 
@@ -181,7 +183,7 @@ class ProjetoCaixaController extends ControllerAdmin
             ]);
         } catch (\Throwable $e) {
             @unlink($destino);
-            $this->message->error("Não foi possível ler o OFX: " . $e->getMessage());
+            $this->message->error("Não foi possível ler o extrato: " . $e->getMessage());
             $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
         }
     }
@@ -385,7 +387,7 @@ class ProjetoCaixaController extends ControllerAdmin
     {
         $rows = DB::execute(
             "SELECT v.id, v.id_movimento, v.id_recibo, v.confianca_match, v.status, v.motivo,
-                    r.nome_original, r.valor AS recibo_valor
+                    r.nome_original, r.valor AS recibo_valor, r.ident_extrato, r.contraparte
              FROM caixa_vinculo v
              INNER JOIN caixa_movimento m ON m.id = v.id_movimento AND m.id_sessao = ? AND m.trash = 0
              INNER JOIN caixa_recibo r ON r.id = v.id_recibo AND r.trash = 0

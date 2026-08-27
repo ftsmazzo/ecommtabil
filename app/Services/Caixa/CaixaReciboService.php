@@ -6,10 +6,16 @@ use App\Core\DB;
 use App\Models\CaixaRecibo;
 
 /**
- * Upload de recibos + cruzamento simples com movimentos (valor/data/texto).
+ * Upload de recibos + cruzamento com movimentos (valor/data/texto/identificação no extrato).
  */
 class CaixaReciboService
 {
+    public function __construct(
+        private ComprovantePdfParser $comprovanteParser = new ComprovantePdfParser(),
+        private PdfTextExtractor $extractor = new PdfTextExtractor()
+    ) {
+    }
+
     /**
      * @param array<int,array{name:string,tmp_name:string,error:int,size:int,type?:string}> $files
      * @return array{criados:int,vinculos:int,avisos:array<int,string>}
@@ -23,7 +29,7 @@ class CaixaReciboService
 
         $criados = 0;
         $avisos = [];
-        $ids = [];
+        $houveRecibo = false;
 
         foreach ($files as $file) {
             if (($file["error"] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
@@ -43,33 +49,78 @@ class CaixaReciboService
                 continue;
             }
 
-            $texto = $ext === "pdf" ? $this->extrairTextoPdf($destino) : "";
-            $extra = $this->inferirCampos($texto, $nome);
+            if ($ext === "pdf") {
+                try {
+                    $itens = $this->comprovanteParser->parseFile($destino);
+                } catch (\Throwable $e) {
+                    $itens = [[
+                        "valor"         => null,
+                        "data"          => null,
+                        "contraparte"   => null,
+                        "ident_extrato" => null,
+                        "texto"         => $this->extractor->extract($destino),
+                    ]];
+                    $avisos[] = "PDF {$nome}: parse parcial — " . $e->getMessage();
+                }
 
-            $ins = DB::table("caixa_recibo")->insert([
-                "id_sessao"         => $idSessao,
-                "arquivo_path"      => "recibos/" . $salvo,
-                "nome_original"     => mb_substr($nome, 0, 255),
-                "data_doc"          => $extra["data"],
-                "valor"             => $extra["valor"],
-                "texto_extraido"    => $texto !== "" ? mb_substr($texto, 0, 50000) : null,
-                "contraparte"       => $extra["contraparte"],
-                "status_extracao"   => $texto !== "" || $extra["valor"] !== null ? "ok" : "pendente",
-                "trash"             => 0,
-            ]);
-            $id = (int) ($ins->id ?? 0);
-            if ($id > 0) {
-                $ids[] = $id;
-                $criados++;
+                if ($itens === []) {
+                    $itens = [[
+                        "valor" => null, "data" => null, "contraparte" => null,
+                        "ident_extrato" => null, "texto" => $this->extractor->extract($destino),
+                    ]];
+                }
+
+                $idx = 0;
+                foreach ($itens as $item) {
+                    $idx++;
+                    $pathRel = "recibos/" . preg_replace('/\.pdf$/i', "_{$idx}.pdf", $salvo);
+                    if ($this->inserirRecibo($idSessao, $pathRel, $nome . " #{$idx}", $item)) {
+                        $criados++;
+                        $houveRecibo = true;
+                    }
+                }
+            } else {
+                $texto = "";
+                $extra = ["data" => null, "valor" => null, "contraparte" => null, "ident_extrato" => null, "texto" => ""];
+                if ($this->inserirRecibo($idSessao, "recibos/" . $salvo, $nome, array_merge($extra, ["texto" => $texto]))) {
+                    $criados++;
+                    $houveRecibo = true;
+                }
             }
         }
 
         $vinculos = 0;
-        if ($ids !== []) {
+        if ($houveRecibo) {
             $vinculos = $this->cruzarSessao($idSessao);
         }
 
         return ["criados" => $criados, "vinculos" => $vinculos, "avisos" => $avisos];
+    }
+
+    /**
+     * @param array{valor:?float,data:?string,contraparte:?string,ident_extrato:?string,texto:string} $item
+     */
+    private function inserirRecibo(int $idSessao, string $pathRel, string $nomeOriginal, array $item): bool
+    {
+        $texto = (string) ($item["texto"] ?? "");
+        if ($texto === "" && $item["valor"] === null) {
+            return false;
+        }
+
+        $ins = DB::table("caixa_recibo")->insert([
+            "id_sessao"       => $idSessao,
+            "arquivo_path"    => $pathRel,
+            "nome_original"   => mb_substr($nomeOriginal, 0, 255),
+            "data_doc"        => $item["data"] ?? null,
+            "valor"           => $item["valor"] ?? null,
+            "texto_extraido"  => $texto !== "" ? mb_substr($texto, 0, 50000) : null,
+            "contraparte"     => $item["contraparte"] ?? null,
+            "ident_extrato"   => $item["ident_extrato"] ?? null,
+            "status_extracao" => ($texto !== "" || $item["valor"] !== null) ? "ok" : "pendente",
+            "trash"           => 0,
+        ]);
+
+        return (int) ($ins->id ?? 0) > 0;
     }
 
     public function cruzarSessao(int $idSessao): int
@@ -82,10 +133,9 @@ class CaixaReciboService
             ->get();
 
         $criados = 0;
+
+        // 1) Match 1:1 valor+data+ident
         foreach ($recibos as $rec) {
-            if ($rec->valor === null && !$rec->data_doc) {
-                continue;
-            }
             $melhor = null;
             $melhorScore = 0;
             foreach ($movs as $m) {
@@ -95,46 +145,108 @@ class CaixaReciboService
                     $melhor = $m;
                 }
             }
-            if ($melhor === null || $melhorScore < 50) {
+            if ($melhor !== null && $melhorScore >= 50) {
+                if ($this->salvarVinculo((int) $melhor->id, (int) $rec->id, $melhorScore, $melhor)) {
+                    $criados++;
+                }
+            }
+        }
+
+        // 2) Match N:1 — vários recibos somam linha agregada (ex. SISPAG SALARIOS)
+        $criados += $this->cruzarAgregados($idSessao, $recibos, $movs);
+
+        return $criados;
+    }
+
+    /**
+     * @param array<int,object> $recibos
+     * @param array<int,object> $movs
+     */
+    private function cruzarAgregados(int $idSessao, array $recibos, array $movs): int
+    {
+        $grupos = [];
+        foreach ($recibos as $rec) {
+            if (empty($rec->ident_extrato) || empty($rec->data_doc)) {
                 continue;
             }
+            $k = trim((string) $rec->ident_extrato) . "|" . (string) $rec->data_doc;
+            $grupos[$k][] = $rec;
+        }
 
-            $existe = DB::table("caixa_vinculo")
-                ->where("id_movimento", "=", (int) $melhor->id)
-                ->where("id_recibo", "=", (int) $rec->id)
-                ->where("trash", "=", 0)
-                ->first();
-            if ($existe) {
-                DB::table("caixa_vinculo")
-                    ->where("id", "=", (int) $existe->id)
-                    ->update([
-                        "confianca_match" => $melhorScore,
-                        "motivo"          => "Match automático valor/data/texto",
-                        "status"          => "sugerido",
-                        "origem"          => "auto",
-                    ]);
-            } else {
-                DB::table("caixa_vinculo")->insert([
-                    "id_movimento"    => (int) $melhor->id,
-                    "id_recibo"       => (int) $rec->id,
-                    "confianca_match" => $melhorScore,
-                    "origem"          => "auto",
-                    "status"          => "sugerido",
-                    "motivo"          => "Match automático valor/data/texto",
-                    "trash"           => 0,
-                ]);
-                $criados++;
+        $criados = 0;
+        foreach ($grupos as $k => $lista) {
+            if (count($lista) < 2) {
+                continue;
             }
+            [$ident, $data] = explode("|", $k, 2);
+            $soma = 0.0;
+            foreach ($lista as $r) {
+                $soma += abs((float) ($r->valor ?? 0));
+            }
+            $soma = round($soma, 2);
 
-            // Se movimento ainda novo, sobe status para sugerido
-            if (($melhor->status ?? "") === "novo") {
-                DB::table("caixa_movimento")
-                    ->where("id", "=", (int) $melhor->id)
-                    ->update(["status" => "sugerido"]);
+            foreach ($movs as $m) {
+                $memo = mb_strtoupper((string) ($m->memo ?? ""), "UTF-8");
+                $identU = mb_strtoupper(trim($ident), "UTF-8");
+                if (!str_contains($memo, trim(explode(" ", $identU)[0]))) {
+                    continue;
+                }
+                if ((string) $m->data_posted !== $data) {
+                    continue;
+                }
+                if (abs(abs((float) $m->valor) - $soma) > 0.05) {
+                    continue;
+                }
+                $score = 92;
+                foreach ($lista as $rec) {
+                    if ($this->salvarVinculo((int) $m->id, (int) $rec->id, $score, $m)) {
+                        $criados++;
+                    }
+                }
+                break;
             }
         }
 
         return $criados;
+    }
+
+    private function salvarVinculo(int $idMov, int $idRec, int $score, object $mov): bool
+    {
+        $existe = DB::table("caixa_vinculo")
+            ->where("id_movimento", "=", $idMov)
+            ->where("id_recibo", "=", $idRec)
+            ->where("trash", "=", 0)
+            ->first();
+
+        if ($existe) {
+            DB::table("caixa_vinculo")
+                ->where("id", "=", (int) $existe->id)
+                ->update([
+                    "confianca_match" => $score,
+                    "motivo"          => "Match valor/data/identificação extrato",
+                    "status"          => "sugerido",
+                    "origem"          => "auto",
+                ]);
+            return false;
+        }
+
+        DB::table("caixa_vinculo")->insert([
+            "id_movimento"    => $idMov,
+            "id_recibo"       => $idRec,
+            "confianca_match" => $score,
+            "origem"          => "auto",
+            "status"          => "sugerido",
+            "motivo"          => "Match valor/data/identificação extrato",
+            "trash"           => 0,
+        ]);
+
+        if (($mov->status ?? "") === "novo") {
+            DB::table("caixa_movimento")
+                ->where("id", "=", $idMov)
+                ->update(["status" => "sugerido"]);
+        }
+
+        return true;
     }
 
     private function scoreMatch(object $mov, object $rec): int
@@ -152,7 +264,11 @@ class CaixaReciboService
             } elseif ($delta <= 5.0) {
                 $score += 15;
             } else {
-                return 0;
+                // Pode ser linha agregada — ident_extrato salva
+                if (empty($rec->ident_extrato)) {
+                    return 0;
+                }
+                $score += 5;
             }
         }
 
@@ -171,75 +287,26 @@ class CaixaReciboService
             }
         }
 
-        $texto = mb_strtolower((string) ($rec->texto_extraido ?? "") . " " . (string) ($rec->nome_original ?? ""));
-        $memo  = mb_strtolower((string) ($mov->memo ?? ""));
-        if ($texto !== "" && $memo !== "") {
-            $tokens = preg_split('/\s+/', preg_replace('/[^a-z0-9à-ü\s]/iu', " ", $memo) ?? "") ?: [];
-            $hits = 0;
-            foreach ($tokens as $t) {
-                if (mb_strlen($t) < 4) {
-                    continue;
-                }
-                if (str_contains($texto, $t)) {
-                    $hits++;
+        if (!empty($rec->ident_extrato)) {
+            $ident = mb_strtoupper(trim((string) $rec->ident_extrato), "UTF-8");
+            $memo  = mb_strtoupper((string) ($mov->memo ?? ""), "UTF-8");
+            foreach (preg_split('/\s+/u', $ident) ?: [] as $tok) {
+                if (mb_strlen($tok) >= 4 && str_contains($memo, $tok)) {
+                    $score += 25;
+                    break;
                 }
             }
-            $score += min(20, $hits * 5);
+        }
+
+        if (!empty($rec->contraparte)) {
+            $nome = mb_strtoupper((string) $rec->contraparte, "UTF-8");
+            $memo = mb_strtoupper((string) ($mov->memo ?? ""), "UTF-8");
+            $partes = preg_split('/\s+/u', $nome) ?: [];
+            if (isset($partes[0]) && mb_strlen($partes[0]) >= 4 && str_contains($memo, $partes[0])) {
+                $score += 10;
+            }
         }
 
         return min(100, $score);
-    }
-
-    private function extrairTextoPdf(string $path): string
-    {
-        $raw = @file_get_contents($path);
-        if ($raw === false || $raw === "") {
-            return "";
-        }
-        $out = [];
-        // Extrai strings literais simples de PDFs digitais
-        if (preg_match_all('/\((?:\\\\.|[^\\\\)]){3,}\)/s', $raw, $m)) {
-            foreach ($m[0] as $chunk) {
-                $s = substr($chunk, 1, -1);
-                $s = str_replace(["\\n", "\\r", "\\t", "\\(", "\\)"], [" ", " ", " ", "(", ")"], $s);
-                $s = preg_replace('/\\\\[0-9]{3}/', "", $s) ?? $s;
-                if (preg_match('/[A-Za-zÀ-ü0-9]{3,}/u', $s)) {
-                    $out[] = $s;
-                }
-            }
-        }
-        $texto = trim(implode(" ", $out));
-        if (mb_strlen($texto) > 8000) {
-            $texto = mb_substr($texto, 0, 8000);
-        }
-        return $texto;
-    }
-
-    /**
-     * @return array{data:?string,valor:?float,contraparte:?string}
-     */
-    private function inferirCampos(string $texto, string $nomeArquivo): array
-    {
-        $blob = $texto . " " . $nomeArquivo;
-        $valor = null;
-        if (preg_match('/R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2}|[0-9]+,[0-9]{2})/u', $blob, $m)) {
-            $valor = (float) str_replace([".", ","], ["", "."], $m[1]);
-        } elseif (preg_match('/\b([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})\b/', $blob, $m)) {
-            $valor = (float) str_replace([".", ","], ["", "."], $m[1]);
-        }
-
-        $data = null;
-        if (preg_match('/\b([0-3]\d)[\/\-]([0-1]\d)[\/\-](20\d{2})\b/', $blob, $m)) {
-            $data = sprintf("%s-%s-%s", $m[3], $m[2], $m[1]);
-        } elseif (preg_match('/\b(20\d{2})[\/\-]([0-1]\d)[\/\-]([0-3]\d)\b/', $blob, $m)) {
-            $data = sprintf("%s-%s-%s", $m[1], $m[2], $m[3]);
-        }
-
-        $contraparte = null;
-        if (preg_match('/(?:favorecido|beneficiario|razao social|nome)[:\s]+([A-Za-zÀ-ü0-9 .&\-]{5,80})/iu', $blob, $m)) {
-            $contraparte = trim($m[1]);
-        }
-
-        return ["data" => $data, "valor" => $valor, "contraparte" => $contraparte];
     }
 }

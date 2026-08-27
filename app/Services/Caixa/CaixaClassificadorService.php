@@ -4,25 +4,21 @@ namespace App\Services\Caixa;
 
 use App\Core\DB;
 use App\Lib\ChatGPT;
-use App\Models\CaixaMovimento;
 use App\Models\DreConta;
 
 /**
- * Classifica movimentos do extrato em contas do plano DFC.
- * Heurística + memória do projeto primeiro; IA só escolhe entre IDs válidos.
+ * Classifica movimentos do extrato em contas do plano DFC + grupo (operacional/investimento/financiamento).
  */
 class CaixaClassificadorService
 {
     private const TIPO = "dfc";
 
     /**
-     * Classifica movimentos ainda sem conta (ou força todos não aprovados/ignorados).
-     *
      * @return array{atualizados:int, por_memoria:int, por_regra:int, por_ia:int, avisos:array<int,string>}
      */
     public function classificarSessao(int $idSessao, int $idProjeto, bool $usarIa = true, bool $soPendentes = true): array
     {
-        DreConta::garantirPlanoSagaPadrao(self::TIPO);
+        DfcGrupoResolver::garantirPlanoComGrupos();
 
         $contas = DreConta::analiticasLista(self::TIPO);
         $whitelist = [];
@@ -53,7 +49,8 @@ class CaixaClassificadorService
             $chave = $this->chaveMemo($memo);
 
             if ($chave !== "" && isset($memoria[$chave])) {
-                $this->aplicar((int) $m->id, (int) $memoria[$chave]["id_conta"], 95, "Memória do projeto (já aprovado)", "sugerido");
+                $idConta = (int) $memoria[$chave]["id_conta"];
+                $this->aplicar((int) $m->id, $idConta, 95, "Memória do projeto (já aprovado)", "sugerido");
                 $atualizados++;
                 $porMemoria++;
                 continue;
@@ -61,7 +58,14 @@ class CaixaClassificadorService
 
             $regra = $this->porRegra($memo, (float) $m->valor, $whitelist);
             if ($regra !== null) {
-                $this->aplicar((int) $m->id, $regra["id"], $regra["confianca"], $regra["motivo"], "sugerido");
+                $this->aplicar(
+                    (int) $m->id,
+                    $regra["id"],
+                    $regra["confianca"],
+                    $regra["motivo"],
+                    "sugerido",
+                    $regra["grupo"] ?? null
+                );
                 $atualizados++;
                 $porRegra++;
                 continue;
@@ -73,7 +77,14 @@ class CaixaClassificadorService
         if ($usarIa && $ambiguos !== []) {
             $ia = $this->classificarComIa($ambiguos, $whitelist);
             foreach ($ia["aplicados"] as $row) {
-                $this->aplicar($row["id"], $row["id_conta"], $row["confianca"], $row["motivo"], "sugerido");
+                $this->aplicar(
+                    $row["id"],
+                    $row["id_conta"],
+                    $row["confianca"],
+                    $row["motivo"],
+                    "sugerido",
+                    $row["grupo"] ?? null
+                );
                 $atualizados++;
                 $porIa++;
             }
@@ -93,7 +104,7 @@ class CaixaClassificadorService
 
     /**
      * @param array<int,object> $whitelist id=>conta
-     * @return array{id:int,confianca:int,motivo:string}|null
+     * @return array{id:int,confianca:int,motivo:string,grupo:string}|null
      */
     private function porRegra(string $memo, float $valor, array $whitelist): ?array
     {
@@ -101,17 +112,22 @@ class CaixaClassificadorService
         $mapa = $this->indiceContas($whitelist);
 
         $regras = [
-            ["rx" => "/pixrecebido|tedrecebid|docrecebid|deposito|creditode|vendas|client/", "nome" => "Recebimentos de Clientes", "conf" => 82, "sinal" => 1],
-            ["rx" => "/rendiment|jurosreceb|aplicacao|rendafixa/", "nome" => "Rendimentos Financeiros Recebidos", "conf" => 80, "sinal" => 1],
-            ["rx" => "/fornecedor|compra|material|mercadoria|estoque/", "nome" => "Pagamentos a Fornecedores", "conf" => 80, "sinal" => -1],
-            ["rx" => "/aluguel|energia|internet|telefone|escritorio|despesa|salario|folha|inss|fgts/", "nome" => "Pagamento de Despesas Operacionais", "conf" => 75, "sinal" => -1],
-            ["rx" => "/tributo|imposto|das|iss|icms|irrf|darf|gps/", "nome" => "Pagamento de Tributos", "conf" => 85, "sinal" => -1],
-            ["rx" => "/imobilizado|equipamento|maquina|veiculo|capex/", "nome" => "Aquisição de Imobilizado (Capex)", "conf" => 78, "sinal" => -1],
-            ["rx" => "/emprestimoreceb|captacao|financiamentoreceb/", "nome" => "Captação de Empréstimos", "conf" => 78, "sinal" => 1],
-            ["rx" => "/amortizacao|parceladeemprest|pagamentodeemprest/", "nome" => "Amortização de Empréstimos", "conf" => 78, "sinal" => -1],
-            ["rx" => "/jurospag|jurosdeemprest/", "nome" => "Juros Pagos", "conf" => 80, "sinal" => -1],
-            ["rx" => "/tarifa|taxa banc|iof|anuidade/", "nome" => "Pagamento de Despesas Operacionais", "conf" => 70, "sinal" => -1],
-            ["rx" => "/pixenviad|tedenviad|docenviad|boleto|pagamento/", "nome" => "Pagamento de Despesas Operacionais", "conf" => 65, "sinal" => -1],
+            ["rx" => "/entradated|tedreceb/", "nome" => "Recebimentos de Clientes", "conf" => 90, "sinal" => 1, "grupo" => DfcGrupoResolver::OPERACIONAL],
+            ["rx" => "/sispag|salario|salarios/", "nome" => "Pagamento de Despesas Operacionais", "conf" => 92, "sinal" => -1, "grupo" => DfcGrupoResolver::OPERACIONAL],
+            ["rx" => "/pixrecebido|tedrecebid|docrecebid|deposito|creditode|vendas|client/", "nome" => "Recebimentos de Clientes", "conf" => 82, "sinal" => 1, "grupo" => DfcGrupoResolver::OPERACIONAL],
+            ["rx" => "/rendpago|rendimento|rendiment/", "nome" => "Rendimentos Financeiros Recebidos", "conf" => 85, "sinal" => 1, "grupo" => DfcGrupoResolver::OPERACIONAL],
+            ["rx" => "/resaplicaut|resaplic/", "nome" => "Rendimentos Financeiros Recebidos", "conf" => 75, "sinal" => 1, "grupo" => DfcGrupoResolver::INVESTIMENTO],
+            ["rx" => "/aplicaut|aplicacao/", "nome" => "Aquisição de Imobilizado (Capex)", "conf" => 78, "sinal" => -1, "grupo" => DfcGrupoResolver::INVESTIMENTO],
+            ["rx" => "/bancobv|bancopan|auto\s*pan/", "nome" => "Amortização de Empréstimos", "conf" => 88, "sinal" => -1, "grupo" => DfcGrupoResolver::FINANCIAMENTO],
+            ["rx" => "/boletopago/", "nome" => "Pagamentos a Fornecedores", "conf" => 72, "sinal" => -1, "grupo" => DfcGrupoResolver::OPERACIONAL],
+            ["rx" => "/fornecedor|compra|material|mercadoria|estoque|mapar|acofer/", "nome" => "Pagamentos a Fornecedores", "conf" => 78, "sinal" => -1, "grupo" => DfcGrupoResolver::OPERACIONAL],
+            ["rx" => "/pixenviad|pixqr|concessionaria|pagamentospix/", "nome" => "Pagamento de Despesas Operacionais", "conf" => 70, "sinal" => -1, "grupo" => DfcGrupoResolver::OPERACIONAL],
+            ["rx" => "/tributo|imposto|das|iss|icms|irrf|darf|gps|fazenda/", "nome" => "Pagamento de Tributos", "conf" => 85, "sinal" => -1, "grupo" => DfcGrupoResolver::OPERACIONAL],
+            ["rx" => "/iof|tar\/custas|tarifa|taxabanc|anuidade/", "nome" => "Juros Pagos", "conf" => 80, "sinal" => -1, "grupo" => DfcGrupoResolver::FINANCIAMENTO],
+            ["rx" => "/imobilizado|equipamento|maquina|veiculo|capex/", "nome" => "Aquisição de Imobilizado (Capex)", "conf" => 78, "sinal" => -1, "grupo" => DfcGrupoResolver::INVESTIMENTO],
+            ["rx" => "/emprestimoreceb|captacao|financiamentoreceb/", "nome" => "Captação de Empréstimos", "conf" => 78, "sinal" => 1, "grupo" => DfcGrupoResolver::FINANCIAMENTO],
+            ["rx" => "/amortizacao|parceladeemprest|pagamentodeemprest/", "nome" => "Amortização de Empréstimos", "conf" => 78, "sinal" => -1, "grupo" => DfcGrupoResolver::FINANCIAMENTO],
+            ["rx" => "/jurospag|jurosdeemprest/", "nome" => "Juros Pagos", "conf" => 80, "sinal" => -1, "grupo" => DfcGrupoResolver::FINANCIAMENTO],
         ];
 
         foreach ($regras as $r) {
@@ -124,14 +140,15 @@ class CaixaClassificadorService
             if ($r["sinal"] < 0 && $valor > 0) {
                 continue;
             }
-            $id = $mapa[$this->norm($r["nome"])] ?? null;
+            $id = $mapa[$this->norm($r["nome"])] ?? DfcGrupoResolver::idContaPorNomeEGrupo($r["nome"], $r["grupo"]);
             if ($id === null) {
                 continue;
             }
             return [
-                "id"        => $id,
+                "id"        => (int) $id,
                 "confianca" => $r["conf"],
-                "motivo"    => "Regra: " . $r["nome"],
+                "motivo"    => "Regra: " . $r["nome"] . " (" . $r["grupo"] . ")",
+                "grupo"     => $r["grupo"],
             ];
         }
 
@@ -160,10 +177,12 @@ class CaixaClassificadorService
 
         $candidatos = [];
         foreach ($whitelist as $c) {
+            $grupo = DfcGrupoResolver::grupoDaConta((int) $c->id) ?? DfcGrupoResolver::grupoPorMemo((string) $c->nome);
             $candidatos[] = [
                 "id"     => (int) $c->id,
                 "codigo" => (string) ($c->codigo ?? ""),
                 "nome"   => (string) ($c->nome ?? ""),
+                "grupo"  => $grupo ?? "operacional",
             ];
         }
 
@@ -188,13 +207,15 @@ class CaixaClassificadorService
             }
 
             $system = <<<PROMPT
-Você classifica lançamentos de extrato bancário no plano DFC.
-Responda SOMENTE JSON: {"itens":[{"chave":"...","id_conta":123,"confianca":0-100,"motivo":"..."}]}
+Você classifica lançamentos de extrato bancário no plano DFC (Demonstração do Fluxo de Caixa).
+Responda SOMENTE JSON: {"itens":[{"chave":"...","id_conta":123,"grupo":"operacional|investimento|financiamento","confianca":0-100,"motivo":"..."}]}
 Regras:
-- id_conta DEVE ser um dos IDs da lista de contas. Senão omita o item.
+- id_conta DEVE ser um dos IDs da lista. grupo DEVE ser operacional, investimento ou financiamento e coerente com a conta.
+- TED/PIX recebido de cliente → Recebimentos de Clientes → operacional.
+- SISPAG SALÁRIOS, fornecedor, tributos, despesas → operacional.
+- Aplicação/resgate investimento, capex → investimento.
+- Empréstimo, amortização, IOF, banco BV/PAN → financiamento.
 - Não invente conta. Se incerto, confianca baixa (30-49) ou omita.
-- grupo implícito: operacional / investimento / financiamento conforme a conta.
-- motivo curto em português.
 PROMPT;
 
             $prompt  = "CONTAS DFC (whitelist):\n" . json_encode($candidatos, JSON_UNESCAPED_UNICODE) . "\n\n";
@@ -227,6 +248,10 @@ PROMPT;
                 $idConta = (int) ($item["id_conta"] ?? 0);
                 $conf = max(0, min(100, (int) ($item["confianca"] ?? 0)));
                 $motivo = trim((string) ($item["motivo"] ?? "Sugestão IA"));
+                $grupoIa = (string) ($item["grupo"] ?? "");
+                if (!in_array($grupoIa, ["operacional", "investimento", "financiamento"], true)) {
+                    $grupoIa = DfcGrupoResolver::grupoDaConta($idConta) ?? "";
+                }
                 if ($chave === "" || !isset($grupos[$chave]) || !isset($whitelist[$idConta])) {
                     continue;
                 }
@@ -239,6 +264,7 @@ PROMPT;
                         "id_conta"  => $idConta,
                         "confianca" => $conf,
                         "motivo"    => "IA: " . mb_substr($motivo, 0, 200),
+                        "grupo"     => $grupoIa ?: null,
                     ];
                 }
             }
@@ -247,14 +273,19 @@ PROMPT;
         return ["aplicados" => $aplicados, "avisos" => $avisos];
     }
 
-    private function aplicar(int $idMov, int $idConta, int $conf, string $motivo, string $status): void
+    private function aplicar(int $idMov, int $idConta, int $conf, string $motivo, string $status, ?string $grupo = null): void
     {
+        if ($grupo === null || $grupo === "") {
+            $grupo = DfcGrupoResolver::grupoDaConta($idConta);
+        }
+
         DB::table("caixa_movimento")
             ->where("id", "=", $idMov)
             ->update([
                 "id_dre_conta"     => $idConta,
                 "confianca_conta"  => max(0, min(100, $conf)),
                 "motivo_conta"     => mb_substr($motivo, 0, 255),
+                "grupo_dfc"        => $grupo,
                 "status"           => $status,
             ]);
     }

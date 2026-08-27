@@ -3,7 +3,6 @@
 namespace App\Services\Caixa;
 
 use App\Core\DB;
-use App\Models\CaixaMovimento;
 use App\Models\DreConta;
 
 class CaixaConferenciaService
@@ -53,6 +52,7 @@ class CaixaConferenciaService
                 "id_dre_conta"    => $idConta,
                 "confianca_conta" => 100,
                 "motivo_conta"    => "Ajuste manual",
+                "grupo_dfc"       => DfcGrupoResolver::grupoDaConta($idConta),
                 "status"          => $aprovar ? "aprovado" : "editado",
             ]);
         if ($aprovar) {

@@ -347,6 +347,130 @@ class DreConta extends Model
     }
 
     /**
+     * Plano DFC com 3 grupos (Operacional / Investimento / Financiamento) e contas analíticas filhas.
+     */
+    public static function garantirPlanoDfcComGrupos(int $idUsuario = 0): int
+    {
+        self::garantirPlanoSagaPadrao("dfc", $idUsuario);
+
+        $criadas = 0;
+        $norm = static function (string $t): string {
+            $t = mb_strtolower(trim($t), "UTF-8");
+            $ascii = @iconv("UTF-8", "ASCII//TRANSLIT//IGNORE", $t);
+            $t = is_string($ascii) ? $ascii : $t;
+            return (string) preg_replace("/[^a-z0-9]+/", "", $t);
+        };
+
+        $estrutura = [
+            "Atividades Operacionais" => [
+                ["Recebimentos de Clientes", "aumenta"],
+                ["Pagamentos a Fornecedores", "diminui"],
+                ["Pagamento de Despesas Operacionais", "diminui"],
+                ["Pagamento de Tributos", "diminui"],
+                ["Rendimentos Financeiros Recebidos", "aumenta"],
+            ],
+            "Atividades de Investimento" => [
+                ["Aquisição de Imobilizado (Capex)", "diminui"],
+            ],
+            "Atividades de Financiamento" => [
+                ["Captação de Empréstimos", "aumenta"],
+                ["Amortização de Empréstimos", "diminui"],
+                ["Juros Pagos", "diminui"],
+            ],
+        ];
+
+        foreach ($estrutura as $grupoNome => $filhas) {
+            $idPai = self::buscarOuCriarSintetica("dfc", $grupoNome, $idUsuario, $criadas, $norm);
+            foreach ($filhas as [$nome, $natureza]) {
+                if (self::buscarOuCriarAnaliticaFilha("dfc", $idPai, $nome, $natureza, $idUsuario, $norm)) {
+                    $criadas++;
+                }
+            }
+        }
+
+        return $criadas;
+    }
+
+    private static function buscarOuCriarSintetica(
+        string $tipo,
+        string $nome,
+        int $idUsuario,
+        int &$criadas,
+        callable $norm
+    ): int {
+        $rows = DB::table("dre_conta")
+            ->whereRaw("LOWER(tipo_demonstrativo) = ?", [$tipo])
+            ->where("trash", "=", 0)
+            ->where("tipo", "=", "sintetica")
+            ->get();
+
+        foreach ($rows as $r) {
+            if ($norm((string) $r->nome) === $norm($nome)) {
+                return (int) $r->id;
+            }
+        }
+
+        $codigo = self::gerarCodigo(null, $tipo);
+        $ins = self::create([
+            "tipo_demonstrativo" => $tipo,
+            "id_pai"             => null,
+            "nivel"              => 1,
+            "codigo"             => $codigo,
+            "nome"               => $nome,
+            "tipo"               => "sintetica",
+            "natureza"           => "aumenta",
+            "sinal"              => 1,
+            "eh_resultado"       => 0,
+            "ordem"              => 10,
+            "trash"              => 0,
+            "created_by"         => $idUsuario ?: null,
+        ]);
+        $criadas++;
+        return (int) ($ins->id ?? 0);
+    }
+
+    private static function buscarOuCriarAnaliticaFilha(
+        string $tipo,
+        int $idPai,
+        string $nome,
+        string $natureza,
+        int $idUsuario,
+        callable $norm
+    ): bool {
+        $existentes = DB::table("dre_conta")
+            ->whereRaw("LOWER(tipo_demonstrativo) = ?", [$tipo])
+            ->where("trash", "=", 0)
+            ->where("tipo", "=", "analitica")
+            ->get();
+
+        foreach ($existentes as $r) {
+            if ($norm((string) $r->nome) === $norm($nome)) {
+                if ((int) ($r->id_pai ?? 0) !== $idPai) {
+                    DB::table("dre_conta")->where("id", "=", (int) $r->id)->update(["id_pai" => $idPai]);
+                }
+                return false;
+            }
+        }
+
+        $codigo = self::gerarCodigo($idPai, $tipo);
+        self::create([
+            "tipo_demonstrativo" => $tipo,
+            "id_pai"             => $idPai,
+            "nivel"              => 2,
+            "codigo"             => $codigo,
+            "nome"               => $nome,
+            "tipo"               => "analitica",
+            "natureza"           => $natureza,
+            "sinal"              => $natureza === "diminui" ? -1 : 1,
+            "eh_resultado"       => 0,
+            "ordem"              => 10,
+            "trash"              => 0,
+            "created_by"         => $idUsuario ?: null,
+        ]);
+        return true;
+    }
+
+    /**
      * Gera o código da conta a partir do pai, dentro de um tipo de demonstrativo.
      * Ex: pai com código "1.2" e 3 filhos existentes → "1.2.4"
      */
