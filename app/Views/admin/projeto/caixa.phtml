@@ -62,11 +62,20 @@ $pendRec = (int)(($cf["recibos_sem_vinculo"] ?? 0));
 <?php else : ?>
 
 <div class="caixa-bar">
-    <div><span class="text-muted">Lançamentos</span><br><strong><?=(int)($cf["movimentos"] ?? $resumo->total ?? 0)?></strong></div>
-    <div><span class="text-muted">Pendentes</span><br><strong class="text-warning"><?=(int)($cf["pendentes"] ?? 0)?></strong></div>
-    <div><span class="text-muted">Aprovados</span><br><strong class="text-success"><?=(int)($cf["aprovados"] ?? 0)?></strong></div>
-    <div><span class="text-muted">Entradas</span><br><strong class="text-success">R$ <?=number_format((float)($cf["creditos"] ?? 0), 2, ",", ".")?></strong></div>
-    <div><span class="text-muted">Saídas</span><br><strong class="text-danger">R$ <?=number_format(abs((float)($cf["debitos"] ?? 0)), 2, ",", ".")?></strong></div>
+    <?php
+        $r = $resumo ?? null;
+        $totMov = (int)($cf["movimentos"] ?? ($r->total ?? 0));
+        $totApr = (int)($cf["aprovados"] ?? ($r->aprovado ?? 0));
+        $totIgn = (int)($cf["ignorados"] ?? ($r->ignorado ?? 0));
+        $totPend = (int)($cf["pendentes"] ?? max(0, $totMov - $totApr - $totIgn));
+        $totCred = (float)($cf["creditos"] ?? ($r->creditos ?? 0));
+        $totDeb = (float)($cf["debitos"] ?? ($r->debitos ?? 0));
+    ?>
+    <div><span class="text-muted">Lançamentos</span><br><strong><?=$totMov?></strong></div>
+    <div><span class="text-muted">Pendentes</span><br><strong class="text-warning"><?=$totPend?></strong></div>
+    <div><span class="text-muted">Aprovados</span><br><strong class="text-success"><?=$totApr?></strong></div>
+    <div><span class="text-muted">Entradas</span><br><strong class="text-success">R$ <?=number_format($totCred, 2, ",", ".")?></strong></div>
+    <div><span class="text-muted">Saídas</span><br><strong class="text-danger">R$ <?=number_format(abs($totDeb), 2, ",", ".")?></strong></div>
     <div><span class="text-muted">Comprovantes</span><br><strong><?=(int)($cf["recibos_vinculados"] ?? 0)?>/<?=(int)($cf["recibos"] ?? 0)?></strong> <span class="text-muted small">ok</span><?php if ($pendRec > 0) : ?> · <span class="text-danger"><?=$pendRec?> sem vínculo</span><?php endif ?></div>
     <div class="ms-auto d-flex flex-wrap gap-1">
         <form action="<?=$router->route("admin.projeto.caixa.recibos", ["id" => $projeto->id])?>" method="POST" enctype="multipart/form-data" class="d-flex gap-1">
@@ -282,6 +291,50 @@ $pendRec = (int)(($cf["recibos_sem_vinculo"] ?? 0));
                         <?php endif ?>
                     </td>
                     <td>
+                        <?php if ($st !== "aprovado" && empty($m->id_dre_conta)) : ?>
+                        <form action="<?=$router->route("admin.projeto.caixa.editar", ["id"=>$projeto->id])?>" method="POST" class="d-flex flex-column gap-1" style="min-width:14rem;">
+                            <input type="hidden" name="csrf" value="<?=$csrf?>">
+                            <input type="hidden" name="sessao_id" value="<?=(int)$sessao->id?>">
+                            <input type="hidden" name="movimento_id" value="<?=(int)$m->id?>">
+                            <input type="hidden" name="status" value="pendentes">
+                            <input type="hidden" name="recibo" value="<?=htmlspecialchars($filtroRecibo, ENT_QUOTES, "UTF-8")?>">
+                            <input type="hidden" name="aprovar" value="1">
+                            <select name="grupo_dfc" class="form-select form-select-sm" required>
+                                <option value="operacional">Operacional</option>
+                                <option value="investimento">Investimento</option>
+                                <option value="financiamento">Financiamento</option>
+                            </select>
+                            <select name="id_dre_conta" class="form-select form-select-sm" required>
+                                <option value="">Conta DFC…</option>
+                                <?php foreach (($contas ?? []) as $c) : ?>
+                                    <?php
+                                        $gOpt = "operacional";
+                                        if (isset($contasPorGrupo)) {
+                                            foreach ($contasPorGrupo as $gn => $lst) {
+                                                foreach ($lst as $cx) {
+                                                    if ((int)$cx->id === (int)$c->id) { $gOpt = $gn; break 2; }
+                                                }
+                                            }
+                                        }
+                                    ?>
+                                    <option value="<?=(int)$c->id?>">
+                                        <?=htmlspecialchars(ucfirst($gOpt === "outros" ? "" : $gOpt) . ($gOpt !== "outros" ? " · " : "") . trim(($c->codigo ?? "") . " " . ($c->nome ?? "")), ENT_QUOTES, "UTF-8")?>
+                                    </option>
+                                <?php endforeach ?>
+                            </select>
+                            <div class="d-flex gap-1">
+                                <button class="btn btn-success btn-sm flex-grow-1" type="submit">Salvar e aprovar</button>
+                            </div>
+                        </form>
+                        <form action="<?=$router->route("admin.projeto.caixa.ignorar", ["id"=>$projeto->id])?>" method="POST" class="mt-1">
+                            <input type="hidden" name="csrf" value="<?=$csrf?>">
+                            <input type="hidden" name="sessao_id" value="<?=(int)$sessao->id?>">
+                            <input type="hidden" name="movimento_id" value="<?=(int)$m->id?>">
+                            <input type="hidden" name="status" value="pendentes">
+                            <input type="hidden" name="recibo" value="<?=htmlspecialchars($filtroRecibo, ENT_QUOTES, "UTF-8")?>">
+                            <button class="btn btn-outline-secondary btn-sm w-100" type="submit">Ignorar (lixo/saldo)</button>
+                        </form>
+                        <?php else : ?>
                         <div class="d-flex flex-wrap gap-1">
                             <?php if ($st !== "aprovado" && !empty($m->id_dre_conta)) : ?>
                             <form action="<?=$router->route("admin.projeto.caixa.aprovar", ["id"=>$projeto->id])?>" method="POST">
@@ -297,7 +350,7 @@ $pendRec = (int)(($cf["recibos_sem_vinculo"] ?? 0));
                                     data-bs-toggle="modal" data-bs-target="#modal-editar-mov"
                                     data-mov-id="<?=(int)$m->id?>"
                                     data-conta="<?=(int)($m->id_dre_conta ?? 0)?>"
-                                    data-grupo="<?=htmlspecialchars($grupo, ENT_QUOTES, "UTF-8")?>"
+                                    data-grupo="<?=htmlspecialchars($grupo !== "" ? $grupo : "operacional", ENT_QUOTES, "UTF-8")?>"
                                     data-memo="<?=htmlspecialchars((string)$m->memo, ENT_QUOTES, "UTF-8")?>">
                                 Editar
                             </button>
@@ -312,6 +365,7 @@ $pendRec = (int)(($cf["recibos_sem_vinculo"] ?? 0));
                             </form>
                             <?php endif ?>
                         </div>
+                        <?php endif ?>
                     </td>
                 </tr>
             <?php endforeach ?>
@@ -360,19 +414,17 @@ $pendRec = (int)(($cf["recibos_sem_vinculo"] ?? 0));
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="edit-mov-conta">Conta</label>
-                        <select name="id_dre_conta" id="edit-mov-conta" class="form-select" required size="8">
-                            <option value="">Selecione…</option>
-                            <?php foreach (($contasPorGrupo ?? []) as $gNome => $listaG) : ?>
-                                <?php if ($listaG === [] || $gNome === "outros") continue; ?>
-                                <optgroup label="<?=htmlspecialchars(ucfirst($gNome), ENT_QUOTES, "UTF-8")?>" data-grupo="<?=htmlspecialchars($gNome, ENT_QUOTES, "UTF-8")?>">
-                                    <?php foreach ($listaG as $c) : ?>
-                                        <option value="<?=(int)$c->id?>" data-grupo="<?=htmlspecialchars($gNome, ENT_QUOTES, "UTF-8")?>">
-                                            <?=htmlspecialchars(trim(($c->codigo ?? "") . " — " . ($c->nome ?? "")), ENT_QUOTES, "UTF-8")?>
-                                        </option>
-                                    <?php endforeach ?>
-                                </optgroup>
+                        <select name="id_dre_conta" id="edit-mov-conta" class="form-select" required>
+                            <option value="">Selecione a conta…</option>
+                            <?php foreach (($contas ?? []) as $c) : ?>
+                                <option value="<?=(int)$c->id?>">
+                                    <?=htmlspecialchars(trim(($c->codigo ?? "") . " — " . ($c->nome ?? "")), ENT_QUOTES, "UTF-8")?>
+                                </option>
                             <?php endforeach ?>
                         </select>
+                        <?php if (empty($contas)) : ?>
+                            <div class="text-danger small mt-1">Nenhuma conta DFC cadastrada. Recarregue a página.</div>
+                        <?php endif ?>
                     </div>
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" name="aprovar" value="1" id="edit-mov-aprovar" checked>
@@ -430,46 +482,7 @@ $pendRec = (int)(($cf["recibos_sem_vinculo"] ?? 0));
 (function () {
     if (window.jQuery) { $('.selectpicker').selectpicker(); }
     var modal = document.getElementById('modal-editar-mov');
-    var selGrupo = document.getElementById('edit-mov-grupo');
-    var selConta = document.getElementById('edit-mov-conta');
-    if (!modal || !selGrupo || !selConta) return;
-
-    function filtrarContasPorGrupo(grupo, keepValue) {
-        selConta.querySelectorAll('optgroup').forEach(function (og) {
-            var g = og.getAttribute('data-grupo') || '';
-            var show = !grupo || g === grupo;
-            og.hidden = !show;
-            og.querySelectorAll('option').forEach(function (opt) {
-                opt.hidden = !show;
-                opt.disabled = !show;
-            });
-        });
-        if (keepValue) {
-            selConta.value = keepValue;
-            if (selConta.value !== String(keepValue)) {
-                var opt = selConta.querySelector('option[value="' + keepValue + '"]');
-                if (opt) {
-                    var g2 = opt.getAttribute('data-grupo') || 'operacional';
-                    selGrupo.value = g2;
-                    filtrarContasPorGrupo(g2, keepValue);
-                }
-            }
-        } else if (selConta.selectedOptions[0] && selConta.selectedOptions[0].disabled) {
-            selConta.value = '';
-        }
-    }
-
-    selGrupo.addEventListener('change', function () { filtrarContasPorGrupo(selGrupo.value, null); });
-    selConta.addEventListener('change', function () {
-        var opt = selConta.selectedOptions[0];
-        if (!opt) return;
-        var g = opt.getAttribute('data-grupo');
-        if (g && selGrupo.value !== g) {
-            selGrupo.value = g;
-            filtrarContasPorGrupo(g, opt.value);
-        }
-    });
-
+    if (!modal) return;
     modal.addEventListener('show.bs.modal', function (ev) {
         var btn = ev.relatedTarget;
         if (!btn) return;
@@ -477,9 +490,8 @@ $pendRec = (int)(($cf["recibos_sem_vinculo"] ?? 0));
         document.getElementById('edit-mov-memo').textContent = btn.getAttribute('data-memo') || '';
         var conta = btn.getAttribute('data-conta') || '';
         var grupo = btn.getAttribute('data-grupo') || 'operacional';
-        selGrupo.value = grupo || 'operacional';
-        filtrarContasPorGrupo(selGrupo.value, conta || null);
-        if (conta) selConta.value = conta;
+        document.getElementById('edit-mov-grupo').value = grupo || 'operacional';
+        document.getElementById('edit-mov-conta').value = conta || '';
     });
 })();
 </script>

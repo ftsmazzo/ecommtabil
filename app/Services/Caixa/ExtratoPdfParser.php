@@ -156,6 +156,15 @@ class ExtratoPdfParser
             return null;
         }
 
+        // Bloco colado com várias movimentações (falha de quebra de linha do PDF)
+        $qtdMov = preg_match_all('/\b(SA[ÍI]DA|ENTRADA|SISPAG|PIX|TED|BOLETO)\b/iu', $resto);
+        if ($qtdMov >= 3) {
+            return null;
+        }
+        if (preg_match_all('/\d{2}\/\d{2}\/\d{4}/', $resto) >= 2) {
+            return null;
+        }
+
         $valor = null;
         if (preg_match('/(-?\d{1,3}(?:\.\d{3})*,\d{2})\s*$/u', $resto, $vm)) {
             $valor = $this->valorBr($vm[1]);

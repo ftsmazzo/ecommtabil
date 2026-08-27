@@ -368,13 +368,18 @@ class ProjetoCaixaController extends ControllerAdmin
 
         $data = new Data($request->all());
         $sessao = CaixaSessao::findAtiva((int) ($data->sessao_id ?? 0), (int) $projeto->id);
-        $idMov = (int) ($data->movimento_id ?? 0);
-        $idConta = (int) ($data->id_dre_conta ?? 0);
-        $grupo = trim((string) ($data->grupo_dfc ?? ""));
-        $aprovar = !isset($data->aprovar) || (string) $data->aprovar === "1";
-        if (!$sessao || $idMov < 1 || $idConta < 1) {
-            $this->message->warning("Informe a conta DFC para salvar.");
+        $idMov = (int) ($data->movimento_id ?? ($_POST["movimento_id"] ?? 0));
+        $idConta = (int) ($data->id_dre_conta ?? ($_POST["id_dre_conta"] ?? 0));
+        $grupo = trim((string) ($data->grupo_dfc ?? ($_POST["grupo_dfc"] ?? "")));
+        $aprovar = !isset($_POST["aprovar"]) || (string) ($_POST["aprovar"] ?? "1") === "1";
+        if (!$sessao || $idMov < 1) {
+            $this->message->warning("Movimento inválido.");
             $this->redirectCaixa((int) $projeto->id, 0, $request->all());
+            return;
+        }
+        if ($idConta < 1) {
+            $this->message->warning("Escolha a conta DFC na lista antes de salvar.");
+            $this->redirectCaixa((int) $projeto->id, (int) $sessao->id, $request->all(), ["status" => "pendentes"]);
             return;
         }
 
