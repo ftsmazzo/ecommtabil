@@ -213,15 +213,38 @@ $temAprovados = $resumo && (int)$resumo->aprovado > 0;
 </div>
 <?php endif ?>
 
-<?php if ($sessao && $recibos) : ?>
+<?php if ($sessao && (int)(($conferencia["recibos"] ?? 0)) > 0) : ?>
+<?php
+    $filtroRecibo = $filtroRecibo ?? "";
+    $baseRec = ["id" => $projeto->id, "sessao" => $sessao->id];
+    $qtdConf = $conferencia ?? [];
+?>
 <div class="card mb-3">
-    <div class="card-header bg-white d-flex flex-wrap align-items-center gap-2">
-        <strong class="me-auto">De-para de comprovantes</strong>
-        <form action="<?=$router->route("admin.projeto.caixa.recruzar_recibos", ["id" => $projeto->id])?>" method="POST" class="d-inline">
-            <input type="hidden" name="csrf" value="<?=$csrf?>">
-            <input type="hidden" name="sessao_id" value="<?=(int)$sessao->id?>">
-            <button type="submit" class="btn btn-outline-primary btn-sm">Recruzar automático</button>
-        </form>
+    <div class="card-header bg-white">
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+            <strong class="me-auto">De-para de comprovantes</strong>
+            <form action="<?=$router->route("admin.projeto.caixa.recruzar_recibos", ["id" => $projeto->id])?>" method="POST" class="d-inline">
+                <input type="hidden" name="csrf" value="<?=$csrf?>">
+                <input type="hidden" name="sessao_id" value="<?=(int)$sessao->id?>">
+                <input type="hidden" name="recibo" value="sem">
+                <button type="submit" class="btn btn-outline-primary btn-sm">Recruzar automático</button>
+            </form>
+            <form action="<?=$router->route("admin.projeto.caixa.confirmar_sugeridos", ["id" => $projeto->id])?>" method="POST" class="d-inline"
+                  onsubmit="return confirm('Confirmar todos os vínculos sugeridos no cruzamento e ficar só com os sem vínculo?');">
+                <input type="hidden" name="csrf" value="<?=$csrf?>">
+                <input type="hidden" name="sessao_id" value="<?=(int)$sessao->id?>">
+                <button type="submit" class="btn btn-success btn-sm">Confirmar sugeridos → cruzamento</button>
+            </form>
+        </div>
+        <div class="d-flex flex-wrap gap-1">
+            <a href="<?=$router->route("admin.projeto.caixa", $baseRec + ["recibo"=>"todos"])?>" class="btn btn-sm <?=$filtroRecibo==="" || $filtroRecibo==="todos" ? "btn-dark" : "btn-outline-secondary"?>">Todos</a>
+            <a href="<?=$router->route("admin.projeto.caixa", $baseRec + ["recibo"=>"sem"])?>" class="btn btn-sm <?=$filtroRecibo==="sem" ? "btn-warning" : "btn-outline-warning"?>">Sem vínculo (<?=(int)($qtdConf["recibos_sem_vinculo"] ?? 0)?>)</a>
+            <a href="<?=$router->route("admin.projeto.caixa", $baseRec + ["recibo"=>"sugerido"])?>" class="btn btn-sm <?=$filtroRecibo==="sugerido" ? "btn-info" : "btn-outline-info"?>">Sugeridos auto</a>
+            <a href="<?=$router->route("admin.projeto.caixa", $baseRec + ["recibo"=>"validado"])?>" class="btn btn-sm <?=$filtroRecibo==="validado" ? "btn-success" : "btn-outline-success"?>">Validados no cruzamento</a>
+        </div>
+        <p class="small text-muted mb-0 mt-2">
+            Fluxo: vincule/altere → <strong>Confirmar no cruzamento</strong> (ou use o botão em massa) → filtre <strong>Sem vínculo</strong> para o que ainda falta.
+        </p>
     </div>
     <div class="table-responsive" style="max-height:18rem;">
         <table class="table table-sm mb-0 align-middle">
@@ -234,6 +257,9 @@ $temAprovados = $resumo && (int)$resumo->aprovado > 0;
                 </tr>
             </thead>
             <tbody>
+            <?php if (!$recibos) : ?>
+                <tr><td colspan="4" class="text-center text-muted py-3">Nenhum comprovante neste filtro.</td></tr>
+            <?php endif ?>
             <?php foreach ($recibos as $rec) : ?>
                 <?php
                     $vRec = $vinculosPorRec[(int)$rec->id] ?? null;
@@ -241,8 +267,13 @@ $temAprovados = $resumo && (int)$resumo->aprovado > 0;
                     if (!empty($rec->ident_extrato)) {
                         $label .= " · " . trim((string)$rec->ident_extrato);
                     }
+                    $stV = $vRec ? (string)($vRec->status ?? "") : "";
+                    $ehValidado = $vRec && (
+                        ($vRec->origem ?? "") === "manual"
+                        || in_array($stV, ["confirmado", "aprovado"], true)
+                    );
                 ?>
-                <tr class="<?=$vRec ? "" : "table-warning"?>">
+                <tr class="<?=$vRec ? ($ehValidado ? "" : "table-info") : "table-warning"?>">
                     <td class="small">
                         <div class="fw-semibold"><?=htmlspecialchars($label, ENT_QUOTES, "UTF-8")?></div>
                         <?php if (!empty($rec->data_doc)) : ?>
@@ -258,10 +289,18 @@ $temAprovados = $resumo && (int)$resumo->aprovado > 0;
                     </td>
                     <td class="small">
                         <?php if ($vRec) : ?>
-                            <span class="badge <?=(($vRec->origem ?? "") === "manual") ? "text-bg-primary" : "text-bg-success"?>">
-                                <?=(($vRec->origem ?? "") === "manual") ? "Manual" : "Auto"?>
-                                <?=(int)$vRec->confianca_match?>%
-                            </span>
+                            <?php if ($ehValidado) : ?>
+                                <span class="badge text-bg-success">No cruzamento</span>
+                            <?php else : ?>
+                                <span class="badge text-bg-info">Sugerido <?=(int)$vRec->confianca_match?>%</span>
+                                <form action="<?=$router->route("admin.projeto.caixa.confirmar_vinculo", ["id" => $projeto->id])?>" method="POST" class="d-inline">
+                                    <input type="hidden" name="csrf" value="<?=$csrf?>">
+                                    <input type="hidden" name="sessao_id" value="<?=(int)$sessao->id?>">
+                                    <input type="hidden" name="vinculo_id" value="<?=(int)$vRec->id?>">
+                                    <input type="hidden" name="recibo" value="sem">
+                                    <button type="submit" class="btn btn-success btn-sm py-0 px-2 ms-1">Confirmar</button>
+                                </form>
+                            <?php endif ?>
                             <form action="<?=$router->route("admin.projeto.caixa.desvincular_recibo", ["id" => $projeto->id])?>" method="POST" class="d-inline">
                                 <input type="hidden" name="csrf" value="<?=$csrf?>">
                                 <input type="hidden" name="sessao_id" value="<?=(int)$sessao->id?>">
@@ -273,11 +312,11 @@ $temAprovados = $resumo && (int)$resumo->aprovado > 0;
                         <?php endif ?>
                     </td>
                     <td>
-                        <form action="<?=$router->route("admin.projeto.caixa.vincular_recibo", ["id" => $projeto->id])?>" method="POST" class="d-flex gap-1 align-items-center">
+                        <form action="<?=$router->route("admin.projeto.caixa.vincular_recibo", ["id" => $projeto->id])?>" method="POST" class="d-flex gap-1 align-items-center flex-wrap">
                             <input type="hidden" name="csrf" value="<?=$csrf?>">
                             <input type="hidden" name="sessao_id" value="<?=(int)$sessao->id?>">
                             <input type="hidden" name="recibo_id" value="<?=(int)$rec->id?>">
-                            <select name="movimento_id" class="form-select form-select-sm" required style="max-width:22rem;">
+                            <select name="movimento_id" class="form-select form-select-sm" required style="min-width:16rem;max-width:24rem;">
                                 <option value="">Escolha o lançamento do extrato…</option>
                                 <?php foreach (($movimentosTodos ?? []) as $mt) : ?>
                                     <?php if ((string)$mt->status === "ignorado") continue; ?>
@@ -288,7 +327,9 @@ $temAprovados = $resumo && (int)$resumo->aprovado > 0;
                                     </option>
                                 <?php endforeach ?>
                             </select>
-                            <button type="submit" class="btn btn-primary btn-sm text-nowrap"><?=$vRec ? "Alterar" : "Vincular"?></button>
+                            <button type="submit" class="btn btn-primary btn-sm text-nowrap">
+                                <?=$vRec ? "Alterar e validar" : "Vincular no cruzamento"?>
+                            </button>
                         </form>
                     </td>
                 </tr>
@@ -309,6 +350,7 @@ $temAprovados = $resumo && (int)$resumo->aprovado > 0;
         <a href="<?=$router->route("admin.projeto.caixa", $baseQ)?>" class="btn btn-sm <?=$filtro==="" && $faixa==="" ? "btn-dark" : "btn-outline-secondary"?>">Todos</a>
         <a href="<?=$router->route("admin.projeto.caixa", $baseQ + ["status"=>"sugerido"])?>" class="btn btn-sm <?=$filtro==="sugerido" ? "btn-dark" : "btn-outline-secondary"?>">Sugeridos</a>
         <a href="<?=$router->route("admin.projeto.caixa", $baseQ + ["status"=>"aprovado"])?>" class="btn btn-sm <?=$filtro==="aprovado" ? "btn-dark" : "btn-outline-secondary"?>">Aprovados</a>
+        <a href="<?=$router->route("admin.projeto.caixa", $baseQ + ["status"=>"sem_recibo"])?>" class="btn btn-sm <?=$filtro==="sem_recibo" ? "btn-warning" : "btn-outline-warning"?>">Sem recibo</a>
         <a href="<?=$router->route("admin.projeto.caixa", $baseQ + ["faixa"=>"alta"])?>" class="btn btn-sm <?=$faixa==="alta" ? "btn-success" : "btn-outline-success"?>">≥85%</a>
         <a href="<?=$router->route("admin.projeto.caixa", $baseQ + ["faixa"=>"media"])?>" class="btn btn-sm <?=$faixa==="media" ? "btn-warning" : "btn-outline-warning"?>">50–84%</a>
         <a href="<?=$router->route("admin.projeto.caixa", $baseQ + ["faixa"=>"baixa"])?>" class="btn btn-sm <?=$faixa==="baixa" ? "btn-danger" : "btn-outline-danger"?>">&lt;50%</a>
@@ -417,6 +459,7 @@ $temAprovados = $resumo && (int)$resumo->aprovado > 0;
                                     data-bs-toggle="modal" data-bs-target="#modal-editar-mov"
                                     data-mov-id="<?=(int)$m->id?>"
                                     data-conta="<?=(int)($m->id_dre_conta ?? 0)?>"
+                                    data-grupo="<?=htmlspecialchars($grupo, ENT_QUOTES, "UTF-8")?>"
                                     data-memo="<?=htmlspecialchars((string)$m->memo, ENT_QUOTES, "UTF-8")?>">
                                 Editar
                             </button>
@@ -441,28 +484,57 @@ $temAprovados = $resumo && (int)$resumo->aprovado > 0;
 <div class="modal fade" id="modal-editar-mov" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
-            <form action="<?=$router->route("admin.projeto.caixa.editar", ["id" => $projeto->id])?>" method="POST">
+            <form action="<?=$router->route("admin.projeto.caixa.editar", ["id" => $projeto->id])?>" method="POST" id="form-editar-mov">
                 <input type="hidden" name="csrf" value="<?=$csrf?>">
                 <input type="hidden" name="sessao_id" value="<?=$sessao ? (int)$sessao->id : 0?>">
                 <input type="hidden" name="movimento_id" id="edit-mov-id" value="">
                 <div class="modal-header">
-                    <h5 class="modal-title">Editar conta DFC</h5>
+                    <h5 class="modal-title">Editar lançamento do extrato</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <p class="small text-muted" id="edit-mov-memo"></p>
-                    <label class="form-label">Conta do plano DFC</label>
-                    <select name="id_dre_conta" id="edit-mov-conta" class="form-control selectpicker" data-live-search="true" data-live-search-normalize="true" required>
-                        <option value="">Selecione...</option>
-                        <?php foreach ($contas as $c) : ?>
-                            <option value="<?=(int)$c->id?>"><?=htmlspecialchars(trim(($c->codigo ?? "") . " — " . ($c->nome ?? "")), ENT_QUOTES, "UTF-8")?></option>
-                        <?php endforeach ?>
-                    </select>
-                    <p class="small text-muted mt-2 mb-0">Ao salvar, o movimento é marcado como aprovado (confiança 100%).</p>
+                    <div class="mb-3">
+                        <label class="form-label" for="edit-mov-grupo">Grupo DFC</label>
+                        <select name="grupo_dfc" id="edit-mov-grupo" class="form-select" required>
+                            <option value="operacional">Operacional</option>
+                            <option value="investimento">Investimento</option>
+                            <option value="financiamento">Financiamento</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="edit-mov-conta">Conta do plano DFC</label>
+                        <select name="id_dre_conta" id="edit-mov-conta" class="form-select" required size="8">
+                            <option value="">Selecione a conta…</option>
+                            <?php foreach (($contasPorGrupo ?? []) as $gNome => $listaG) : ?>
+                                <?php if ($listaG === [] || $gNome === "outros") continue; ?>
+                                <optgroup label="<?=htmlspecialchars(ucfirst($gNome), ENT_QUOTES, "UTF-8")?>" data-grupo="<?=htmlspecialchars($gNome, ENT_QUOTES, "UTF-8")?>">
+                                    <?php foreach ($listaG as $c) : ?>
+                                        <option value="<?=(int)$c->id?>" data-grupo="<?=htmlspecialchars($gNome, ENT_QUOTES, "UTF-8")?>">
+                                            <?=htmlspecialchars(trim(($c->codigo ?? "") . " — " . ($c->nome ?? "")), ENT_QUOTES, "UTF-8")?>
+                                        </option>
+                                    <?php endforeach ?>
+                                </optgroup>
+                            <?php endforeach ?>
+                            <?php if (!empty($contasPorGrupo["outros"])) : ?>
+                                <optgroup label="Outras" data-grupo="outros">
+                                    <?php foreach ($contasPorGrupo["outros"] as $c) : ?>
+                                        <option value="<?=(int)$c->id?>" data-grupo="outros">
+                                            <?=htmlspecialchars(trim(($c->codigo ?? "") . " — " . ($c->nome ?? "")), ENT_QUOTES, "UTF-8")?>
+                                        </option>
+                                    <?php endforeach ?>
+                                </optgroup>
+                            <?php endif ?>
+                        </select>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="aprovar" value="1" id="edit-mov-aprovar" checked>
+                        <label class="form-check-label" for="edit-mov-aprovar">Aprovar ao salvar</label>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Salvar e aprovar</button>
+                    <button type="submit" class="btn btn-primary">Salvar conta e grupo</button>
                 </div>
             </form>
         </div>
@@ -510,17 +582,65 @@ $temAprovados = $resumo && (int)$resumo->aprovado > 0;
 <script>
 (function () {
     if (window.jQuery) { $('.selectpicker').selectpicker(); }
+
     var modal = document.getElementById('modal-editar-mov');
-    if (!modal) return;
+    var selGrupo = document.getElementById('edit-mov-grupo');
+    var selConta = document.getElementById('edit-mov-conta');
+    if (!modal || !selGrupo || !selConta) return;
+
+    function filtrarContasPorGrupo(grupo, keepValue) {
+        var groups = selConta.querySelectorAll('optgroup');
+        groups.forEach(function (og) {
+            var g = og.getAttribute('data-grupo') || '';
+            var show = !grupo || g === grupo || g === 'outros';
+            og.disabled = !show;
+            og.hidden = !show;
+            og.querySelectorAll('option').forEach(function (opt) {
+                opt.disabled = !show;
+                opt.hidden = !show;
+            });
+        });
+        if (keepValue) {
+            selConta.value = keepValue;
+            if (selConta.value !== String(keepValue)) {
+                // conta de outro grupo: troca o grupo para o da conta
+                var opt = selConta.querySelector('option[value="' + keepValue + '"]');
+                if (opt) {
+                    var g2 = opt.getAttribute('data-grupo') || 'operacional';
+                    selGrupo.value = g2;
+                    filtrarContasPorGrupo(g2, keepValue);
+                }
+            }
+        } else if (selConta.selectedOptions[0] && selConta.selectedOptions[0].disabled) {
+            selConta.value = '';
+        }
+    }
+
+    selGrupo.addEventListener('change', function () {
+        filtrarContasPorGrupo(selGrupo.value, null);
+    });
+
+    selConta.addEventListener('change', function () {
+        var opt = selConta.selectedOptions[0];
+        if (!opt) return;
+        var g = opt.getAttribute('data-grupo');
+        if (g && g !== 'outros' && selGrupo.value !== g) {
+            selGrupo.value = g;
+            filtrarContasPorGrupo(g, opt.value);
+        }
+    });
+
     modal.addEventListener('show.bs.modal', function (ev) {
         var btn = ev.relatedTarget;
         if (!btn) return;
         document.getElementById('edit-mov-id').value = btn.getAttribute('data-mov-id') || '';
         document.getElementById('edit-mov-memo').textContent = btn.getAttribute('data-memo') || '';
         var conta = btn.getAttribute('data-conta') || '';
-        var sel = document.getElementById('edit-mov-conta');
-        sel.value = conta;
-        if (window.jQuery) { $(sel).selectpicker('val', conta); $(sel).selectpicker('refresh'); }
+        var grupo = btn.getAttribute('data-grupo') || 'operacional';
+        if (!grupo) grupo = 'operacional';
+        selGrupo.value = grupo;
+        filtrarContasPorGrupo(grupo, conta || null);
+        if (conta) selConta.value = conta;
     });
 })();
 </script>

@@ -443,6 +443,55 @@ class CaixaReciboService
         return $criados;
     }
 
+    /**
+     * Confirma vínculo sugerido no cruzamento (vira validado).
+     */
+    public function confirmarVinculo(int $idSessao, int $idVinculo): bool
+    {
+        $row = DB::execute(
+            "SELECT v.id
+             FROM caixa_vinculo v
+             INNER JOIN caixa_movimento m ON m.id = v.id_movimento AND m.id_sessao = ? AND m.trash = 0
+             WHERE v.id = ? AND v.trash = 0
+             LIMIT 1",
+            [$idSessao, $idVinculo]
+        );
+        if ($row === []) {
+            return false;
+        }
+
+        DB::table("caixa_vinculo")
+            ->where("id", "=", $idVinculo)
+            ->update([
+                "status"          => "confirmado",
+                "confianca_match" => 100,
+                "motivo"          => "Confirmado no cruzamento",
+            ]);
+
+        return true;
+    }
+
+    /**
+     * Confirma todos os vínculos automáticos sugeridos da sessão.
+     */
+    public function confirmarSugeridos(int $idSessao): int
+    {
+        $rows = DB::execute(
+            "SELECT v.id
+             FROM caixa_vinculo v
+             INNER JOIN caixa_movimento m ON m.id = v.id_movimento AND m.id_sessao = ? AND m.trash = 0
+             WHERE v.trash = 0 AND v.status = 'sugerido'",
+            [$idSessao]
+        );
+        $n = 0;
+        foreach ($rows as $r) {
+            if ($this->confirmarVinculo($idSessao, (int) $r->id)) {
+                $n++;
+            }
+        }
+        return $n;
+    }
+
     private function salvarVinculo(
         int $idMov,
         int $idRec,

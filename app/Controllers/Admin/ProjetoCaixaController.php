@@ -61,9 +61,10 @@ class ProjetoCaixaController extends ControllerAdmin
         if ($sessao) {
             $filtro = trim((string) (($request->all()["status"] ?? "")));
             $faixa = trim((string) (($request->all()["faixa"] ?? "")));
+            $filtroRecibo = trim((string) (($request->all()["recibo"] ?? "")));
             $movimentosTodos = CaixaMovimento::porSessao((int) $sessao->id, null);
             $movimentos = $movimentosTodos;
-            if ($filtro !== "") {
+            if ($filtro !== "" && $filtro !== "sem_recibo") {
                 $movimentos = array_values(array_filter($movimentos, static fn ($m) => (string) $m->status === $filtro));
             }
             if ($faixa !== "") {
@@ -83,12 +84,51 @@ class ProjetoCaixaController extends ControllerAdmin
             $vinculosPorMov = $this->vinculosPorMovimento((int) $sessao->id);
             $vinculosPorRec = $this->vinculosPorRecibo($vinculosPorMov);
             $conferencia = (new CaixaReciboService())->conferencia((int) $sessao->id);
+
+            if ($filtro === "sem_recibo") {
+                $movimentos = array_values(array_filter(
+                    $movimentosTodos,
+                    static fn ($m) => empty($vinculosPorMov[(int) $m->id]) && (string) $m->status !== "ignorado"
+                ));
+            }
+
+            if ($filtroRecibo !== "" && $filtroRecibo !== "todos") {
+                $recibos = array_values(array_filter($recibos, static function ($rec) use ($filtroRecibo, $vinculosPorRec) {
+                    $v = $vinculosPorRec[(int) $rec->id] ?? null;
+                    if ($filtroRecibo === "sem") {
+                        return $v === null;
+                    }
+                    if ($filtroRecibo === "sugerido") {
+                        return $v !== null && (string) ($v->status ?? "") === "sugerido";
+                    }
+                    if ($filtroRecibo === "validado") {
+                        if ($v === null) {
+                            return false;
+                        }
+                        $st = (string) ($v->status ?? "");
+                        $origem = (string) ($v->origem ?? "");
+                        return $origem === "manual" || in_array($st, ["confirmado", "aprovado"], true);
+                    }
+                    return true;
+                }));
+            }
         }
 
         $contas = DreConta::analiticasLista("dfc");
         $contasMap = [];
+        $contasPorGrupo = [
+            "operacional"   => [],
+            "investimento"  => [],
+            "financiamento" => [],
+            "outros"        => [],
+        ];
         foreach ($contas as $c) {
             $contasMap[(int) $c->id] = $c;
+            $g = DfcGrupoResolver::grupoDaConta((int) $c->id) ?? "outros";
+            if (!isset($contasPorGrupo[$g])) {
+                $g = "outros";
+            }
+            $contasPorGrupo[$g][] = $c;
         }
 
         $label = trim((string) ($projeto->nome ?? "")) ?: $projeto->empresa_print;
@@ -120,8 +160,10 @@ class ProjetoCaixaController extends ControllerAdmin
             "conferencia"     => $conferencia,
             "contas"          => $contas,
             "contasMap"       => $contasMap,
+            "contasPorGrupo"  => $contasPorGrupo,
             "filtro"          => trim((string) (($request->all()["status"] ?? ""))),
             "faixa"           => trim((string) (($request->all()["faixa"] ?? ""))),
+            "filtroRecibo"    => trim((string) (($request->all()["recibo"] ?? ""))),
             "csrf"            => $this->csrf->generate(),
             "empresas"        => Empresa::orderBy("razao")->get(),
             "permissao"       => [
@@ -272,6 +314,7 @@ class ProjetoCaixaController extends ControllerAdmin
         $this->router->redirect("admin.projeto.caixa", [
             "id"     => $projeto->id,
             "sessao" => $sessao->id,
+            "recibo" => "sem",
         ]);
     }
 
@@ -299,17 +342,27 @@ class ProjetoCaixaController extends ControllerAdmin
         $sessao = CaixaSessao::findAtiva((int) ($data->sessao_id ?? 0), (int) $projeto->id);
         $idMov = (int) ($data->movimento_id ?? 0);
         $idConta = (int) ($data->id_dre_conta ?? 0);
+        $grupo = trim((string) ($data->grupo_dfc ?? ""));
+        $aprovar = !isset($data->aprovar) || (string) $data->aprovar === "1";
         if (!$sessao || $idMov < 1 || $idConta < 1) {
-            $this->message->warning("Dados incompletos para editar.");
+            $this->message->warning("Informe a conta DFC para salvar.");
             $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
             return;
         }
 
-        $ok = (new CaixaConferenciaService())->editar($idMov, (int) $sessao->id, $idConta, true);
+        $ok = (new CaixaConferenciaService())->editar(
+            $idMov,
+            (int) $sessao->id,
+            $idConta,
+            $aprovar,
+            $grupo !== "" ? $grupo : null
+        );
         if ($ok) {
-            $this->message->success("Movimento atualizado e aprovado.");
+            $this->message->success($aprovar
+                ? "Movimento atualizado (conta + grupo) e aprovado."
+                : "Movimento atualizado (conta + grupo).");
         } else {
-            $this->message->warning("Não foi possível salvar a conta.");
+            $this->message->warning("Não foi possível salvar. Confira se a conta é analítica do DFC.");
         }
         $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id, "sessao" => $sessao->id]);
     }
@@ -395,11 +448,15 @@ class ProjetoCaixaController extends ControllerAdmin
 
         $ok = (new CaixaReciboService())->vincularManual((int) $sessao->id, $idRec, $idMov);
         if ($ok) {
-            $this->message->success("Comprovante vinculado manualmente ao lançamento.");
+            $this->message->success("Comprovante vinculado e validado no cruzamento.");
         } else {
             $this->message->warning("Não foi possível vincular. Confira se recibo e movimento pertencem à sessão.");
         }
-        $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id, "sessao" => $sessao->id]);
+        $this->router->redirect("admin.projeto.caixa", [
+            "id"     => $projeto->id,
+            "sessao" => $sessao->id,
+            "recibo" => "sem",
+        ]);
     }
 
     public function desvincularRecibo(Request $request): void
@@ -443,8 +500,65 @@ class ProjetoCaixaController extends ControllerAdmin
         }
 
         $n = (new CaixaReciboService())->cruzarSessao((int) $sessao->id);
-        $this->message->success("Recruzamento: {$n} novo(s) vínculo(s) automático(s). Vínculos manuais foram preservados.");
-        $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id, "sessao" => $sessao->id]);
+        $this->message->success("Recruzamento: {$n} novo(s) vínculo(s) automático(s). Vínculos manuais/confirmados foram preservados.");
+        $this->router->redirect("admin.projeto.caixa", [
+            "id"     => $projeto->id,
+            "sessao" => $sessao->id,
+            "recibo" => (string) ($data->recibo ?? "sem"),
+        ]);
+    }
+
+    public function confirmarVinculo(Request $request): void
+    {
+        $this->authorize("projeto_gerenciar");
+        $projeto = $this->carregarProjeto($request, true);
+        if (!$projeto) {
+            return;
+        }
+
+        $data = new Data($request->all());
+        $sessao = CaixaSessao::findAtiva((int) ($data->sessao_id ?? 0), (int) $projeto->id);
+        $idVinculo = (int) ($data->vinculo_id ?? 0);
+        if (!$sessao || $idVinculo < 1) {
+            $this->message->warning("Vínculo inválido.");
+            $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+            return;
+        }
+
+        $ok = (new CaixaReciboService())->confirmarVinculo((int) $sessao->id, $idVinculo);
+        $this->message->{$ok ? "success" : "warning"}(
+            $ok ? "Comprovante confirmado no cruzamento." : "Não foi possível confirmar."
+        );
+        $this->router->redirect("admin.projeto.caixa", [
+            "id"     => $projeto->id,
+            "sessao" => $sessao->id,
+            "recibo" => (string) ($data->recibo ?? "sem"),
+        ]);
+    }
+
+    public function confirmarSugeridos(Request $request): void
+    {
+        $this->authorize("projeto_gerenciar");
+        $projeto = $this->carregarProjeto($request, true);
+        if (!$projeto) {
+            return;
+        }
+
+        $data = new Data($request->all());
+        $sessao = CaixaSessao::findAtiva((int) ($data->sessao_id ?? 0), (int) $projeto->id);
+        if (!$sessao) {
+            $this->message->warning("Sessão inválida.");
+            $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+            return;
+        }
+
+        $n = (new CaixaReciboService())->confirmarSugeridos((int) $sessao->id);
+        $this->message->success("Confirmados {$n} vínculo(s) no cruzamento. Restam os sem vínculo para o de-para.");
+        $this->router->redirect("admin.projeto.caixa", [
+            "id"     => $projeto->id,
+            "sessao" => $sessao->id,
+            "recibo" => "sem",
+        ]);
     }
 
     private function acaoMovimento(Request $request, string $acao): void

@@ -159,6 +159,8 @@ $router->namespace("\App\Controllers\Admin")->group(null);
     $router->post("/projetos/{id}/caixa/vincular-recibo", "ProjetoCaixaController:vincularRecibo", "admin.projeto.caixa.vincular_recibo");
     $router->post("/projetos/{id}/caixa/desvincular-recibo", "ProjetoCaixaController:desvincularRecibo", "admin.projeto.caixa.desvincular_recibo");
     $router->post("/projetos/{id}/caixa/recruzar-recibos", "ProjetoCaixaController:recrossarRecibos", "admin.projeto.caixa.recruzar_recibos");
+    $router->post("/projetos/{id}/caixa/confirmar-vinculo", "ProjetoCaixaController:confirmarVinculo", "admin.projeto.caixa.confirmar_vinculo");
+    $router->post("/projetos/{id}/caixa/confirmar-sugeridos", "ProjetoCaixaController:confirmarSugeridos", "admin.projeto.caixa.confirmar_sugeridos");
     $router->post("/projetos/{id}/caixa/aprovar", "ProjetoCaixaController:aprovar", "admin.projeto.caixa.aprovar");
     $router->post("/projetos/{id}/caixa/ignorar", "ProjetoCaixaController:ignorar", "admin.projeto.caixa.ignorar");
     $router->post("/projetos/{id}/caixa/editar", "ProjetoCaixaController:editar", "admin.projeto.caixa.editar");

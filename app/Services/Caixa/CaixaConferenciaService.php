@@ -32,8 +32,13 @@ class CaixaConferenciaService
         return true;
     }
 
-    public function editar(int $idMovimento, int $idSessao, int $idConta, bool $aprovar = true): bool
-    {
+    public function editar(
+        int $idMovimento,
+        int $idSessao,
+        int $idConta,
+        bool $aprovar = true,
+        ?string $grupoForcado = null
+    ): bool {
         $m = $this->movimentoDaSessao($idMovimento, $idSessao);
         if (!$m) {
             return false;
@@ -46,13 +51,24 @@ class CaixaConferenciaService
             return false;
         }
 
+        $grupo = $grupoForcado;
+        if ($grupo !== null && $grupo !== "") {
+            $grupo = strtolower(trim($grupo));
+            if (!in_array($grupo, ["operacional", "investimento", "financiamento"], true)) {
+                $grupo = null;
+            }
+        }
+        if ($grupo === null || $grupo === "") {
+            $grupo = DfcGrupoResolver::grupoDaConta($idConta);
+        }
+
         DB::table("caixa_movimento")
             ->where("id", "=", $idMovimento)
             ->update([
                 "id_dre_conta"    => $idConta,
                 "confianca_conta" => 100,
                 "motivo_conta"    => "Ajuste manual",
-                "grupo_dfc"       => DfcGrupoResolver::grupoDaConta($idConta),
+                "grupo_dfc"       => $grupo,
                 "status"          => $aprovar ? "aprovado" : "editado",
             ]);
         if ($aprovar) {
