@@ -78,6 +78,29 @@ class CaixaConferenciaService
     }
 
     /**
+     * Aprova todos os movimentos sugeridos/editados que já têm conta.
+     */
+    public function aprovarSugeridos(int $idSessao): int
+    {
+        $rows = DB::table("caixa_movimento")
+            ->where("id_sessao", "=", $idSessao)
+            ->where("trash", "=", 0)
+            ->whereIn("status", ["sugerido", "editado", "novo"])
+            ->whereNotNull("id_dre_conta")
+            ->get();
+
+        $n = 0;
+        foreach ($rows as $r) {
+            DB::table("caixa_movimento")
+                ->where("id", "=", (int) $r->id)
+                ->update(["status" => "aprovado"]);
+            $this->aprovarVinculos((int) $r->id);
+            $n++;
+        }
+        return $n;
+    }
+
+    /**
      * @return int quantidade aprovada
      */
     public function aprovarAltas(int $idSessao, int $minConf = 85): int
