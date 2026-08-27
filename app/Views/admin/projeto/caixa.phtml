@@ -81,26 +81,9 @@ $temAprovados = $resumo && (int)$resumo->aprovado > 0;
                     <button type="submit" class="btn btn-outline-primary btn-sm w-100"><i class="uil uil-paperclip me-1"></i>Enviar e cruzar</button>
                 </form>
                 <?php if ($recibos) : ?>
-                    <div class="small text-muted mt-2 mb-1"><?=count($recibos)?> comprovante(s) carregado(s):</div>
-                    <div class="border rounded p-2" style="max-height:9rem;overflow:auto;">
-                        <?php foreach ($recibos as $rec) : ?>
-                            <div class="small border-bottom py-1">
-                                <div class="fw-semibold"><?=htmlspecialchars((string)($rec->contraparte ?: $rec->nome_original), ENT_QUOTES, "UTF-8")?></div>
-                                <div class="text-muted">
-                                    <?php if (!empty($rec->data_doc)) : ?><?=date("d/m/Y", strtotime((string)$rec->data_doc))?> · <?php endif ?>
-                                    <?php if ($rec->valor !== null && $rec->valor !== "") : ?>
-                                        R$ <?=number_format((float)$rec->valor, 2, ",", ".")?>
-                                    <?php endif ?>
-                                    <?php if (!empty($rec->ident_extrato)) : ?>
-                                        · <span class="text-primary"><?=htmlspecialchars(trim((string)$rec->ident_extrato), ENT_QUOTES, "UTF-8")?></span>
-                                    <?php endif ?>
-                                </div>
-                            </div>
-                        <?php endforeach ?>
+                    <div class="small text-muted mt-2 mb-0">
+                        <?=count($recibos)?> comprovante(s) — use o <strong>de-para</strong> abaixo para vincular ou corrigir.
                     </div>
-                    <p class="small text-muted mt-2 mb-0">
-                        O match aparece na coluna <strong>Recibo</strong> da tabela abaixo (só nas linhas do extrato que bateram valor/data).
-                    </p>
                 <?php endif ?>
                 <?php else : ?>
                 <p class="small text-muted mb-0">Envie o extrato primeiro.</p>
@@ -183,10 +166,143 @@ $temAprovados = $resumo && (int)$resumo->aprovado > 0;
 </div>
 <?php endif ?>
 
+<?php if ($sessao && $conferencia) : ?>
+<?php
+    $cf = $conferencia;
+    $okMov = !empty($cf["movimentos_ok"]);
+    $cobertura = (int) ($cf["cobertura_recibos"] ?? 0);
+?>
+<div class="card mb-3 border-0 shadow-sm">
+    <div class="card-body py-3">
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+            <strong class="me-auto">Conferência do extrato</strong>
+            <?php if ($okMov) : ?>
+                <span class="badge text-bg-success">Lançamentos OK: <?=(int)$cf["movimentos"]?> / <?=(int)$cf["movimentos_esperados"]?></span>
+            <?php else : ?>
+                <span class="badge text-bg-danger">Divergência: <?=(int)$cf["movimentos"]?> lidos vs <?=(int)$cf["movimentos_esperados"]?> esperados</span>
+            <?php endif ?>
+            <span class="badge text-bg-light border">Pendentes <?=(int)$cf["pendentes"]?></span>
+            <span class="badge text-bg-success">Aprovados <?=(int)$cf["aprovados"]?></span>
+            <span class="badge text-bg-secondary">Ignorados <?=(int)$cf["ignorados"]?></span>
+        </div>
+        <div class="row g-2 small">
+            <div class="col-6 col-md-3">
+                <div class="text-muted">Entradas</div>
+                <div class="fw-semibold text-success">R$ <?=number_format((float)$cf["creditos"], 2, ",", ".")?></div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="text-muted">Saídas</div>
+                <div class="fw-semibold text-danger">R$ <?=number_format(abs((float)$cf["debitos"]), 2, ",", ".")?></div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="text-muted">Líquido</div>
+                <div class="fw-semibold">R$ <?=number_format((float)$cf["liquido"], 2, ",", ".")?></div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="text-muted">Comprovantes vinculados</div>
+                <div class="fw-semibold">
+                    <?=(int)$cf["recibos_vinculados"]?> / <?=(int)$cf["recibos"]?>
+                    <span class="text-muted">(<?=$cobertura?>%)</span>
+                    <?php if ((int)$cf["recibos_sem_vinculo"] > 0) : ?>
+                        · <span class="text-danger"><?=(int)$cf["recibos_sem_vinculo"]?> sem vínculo</span>
+                    <?php endif ?>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif ?>
+
+<?php if ($sessao && $recibos) : ?>
+<div class="card mb-3">
+    <div class="card-header bg-white d-flex flex-wrap align-items-center gap-2">
+        <strong class="me-auto">De-para de comprovantes</strong>
+        <form action="<?=$router->route("admin.projeto.caixa.recruzar_recibos", ["id" => $projeto->id])?>" method="POST" class="d-inline">
+            <input type="hidden" name="csrf" value="<?=$csrf?>">
+            <input type="hidden" name="sessao_id" value="<?=(int)$sessao->id?>">
+            <button type="submit" class="btn btn-outline-primary btn-sm">Recruzar automático</button>
+        </form>
+    </div>
+    <div class="table-responsive" style="max-height:18rem;">
+        <table class="table table-sm mb-0 align-middle">
+            <thead class="table-light sticky-top">
+                <tr>
+                    <th>Comprovante</th>
+                    <th class="text-end">Valor</th>
+                    <th>Status</th>
+                    <th style="min-width:18rem;">Vincular / alterar (movimento do extrato)</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($recibos as $rec) : ?>
+                <?php
+                    $vRec = $vinculosPorRec[(int)$rec->id] ?? null;
+                    $label = trim((string)($rec->contraparte ?: $rec->nome_original));
+                    if (!empty($rec->ident_extrato)) {
+                        $label .= " · " . trim((string)$rec->ident_extrato);
+                    }
+                ?>
+                <tr class="<?=$vRec ? "" : "table-warning"?>">
+                    <td class="small">
+                        <div class="fw-semibold"><?=htmlspecialchars($label, ENT_QUOTES, "UTF-8")?></div>
+                        <?php if (!empty($rec->data_doc)) : ?>
+                            <div class="text-muted"><?=date("d/m/Y", strtotime((string)$rec->data_doc))?></div>
+                        <?php endif ?>
+                    </td>
+                    <td class="text-end text-nowrap small">
+                        <?php if ($rec->valor !== null && $rec->valor !== "") : ?>
+                            R$ <?=number_format((float)$rec->valor, 2, ",", ".")?>
+                        <?php else : ?>
+                            <span class="text-muted">—</span>
+                        <?php endif ?>
+                    </td>
+                    <td class="small">
+                        <?php if ($vRec) : ?>
+                            <span class="badge <?=(($vRec->origem ?? "") === "manual") ? "text-bg-primary" : "text-bg-success"?>">
+                                <?=(($vRec->origem ?? "") === "manual") ? "Manual" : "Auto"?>
+                                <?=(int)$vRec->confianca_match?>%
+                            </span>
+                            <form action="<?=$router->route("admin.projeto.caixa.desvincular_recibo", ["id" => $projeto->id])?>" method="POST" class="d-inline">
+                                <input type="hidden" name="csrf" value="<?=$csrf?>">
+                                <input type="hidden" name="sessao_id" value="<?=(int)$sessao->id?>">
+                                <input type="hidden" name="vinculo_id" value="<?=(int)$vRec->id?>">
+                                <button type="submit" class="btn btn-link btn-sm text-danger p-0 ms-1">Desvincular</button>
+                            </form>
+                        <?php else : ?>
+                            <span class="badge text-bg-warning">Sem vínculo</span>
+                        <?php endif ?>
+                    </td>
+                    <td>
+                        <form action="<?=$router->route("admin.projeto.caixa.vincular_recibo", ["id" => $projeto->id])?>" method="POST" class="d-flex gap-1 align-items-center">
+                            <input type="hidden" name="csrf" value="<?=$csrf?>">
+                            <input type="hidden" name="sessao_id" value="<?=(int)$sessao->id?>">
+                            <input type="hidden" name="recibo_id" value="<?=(int)$rec->id?>">
+                            <select name="movimento_id" class="form-select form-select-sm" required style="max-width:22rem;">
+                                <option value="">Escolha o lançamento do extrato…</option>
+                                <?php foreach (($movimentosTodos ?? []) as $mt) : ?>
+                                    <?php if ((string)$mt->status === "ignorado") continue; ?>
+                                    <option value="<?=(int)$mt->id?>" <?=($vRec && (int)$vRec->id_movimento === (int)$mt->id) ? "selected" : ""?>>
+                                        <?=date("d/m", strtotime((string)$mt->data_posted))?>
+                                        · <?=htmlspecialchars(mb_substr((string)$mt->memo, 0, 42), ENT_QUOTES, "UTF-8")?>
+                                        · R$ <?=number_format((float)$mt->valor, 2, ",", ".")?>
+                                    </option>
+                                <?php endforeach ?>
+                            </select>
+                            <button type="submit" class="btn btn-primary btn-sm text-nowrap"><?=$vRec ? "Alterar" : "Vincular"?></button>
+                        </form>
+                    </td>
+                </tr>
+            <?php endforeach ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+<?php endif ?>
+
 <?php if ($sessao) : ?>
 <div class="card">
     <div class="card-header d-flex flex-wrap align-items-center gap-2 bg-white">
-        <strong class="me-auto">Conferência</strong>
+        <strong class="me-auto">Conferência dos lançamentos</strong>
         <?php
         $baseQ = ["id" => $projeto->id, "sessao" => $sessao->id];
         ?>
@@ -264,20 +380,22 @@ $temAprovados = $resumo && (int)$resumo->aprovado > 0;
                     </td>
                     <td class="small">
                         <?php if ($vincs) : ?>
-                            <?php $v0 = $vincs[0]; ?>
-                            <span class="conf-pill <?=((int)$v0->confianca_match >= 85 ? "conf-alta" : (((int)$v0->confianca_match >= 50) ? "conf-media" : "conf-baixa"))?>">
-                                <?=(int)$v0->confianca_match?>%
-                            </span>
-                            <div class="motivo-mini" title="<?=htmlspecialchars((string)$v0->nome_original, ENT_QUOTES, "UTF-8")?>">
-                                <?=htmlspecialchars((string)$v0->nome_original, ENT_QUOTES, "UTF-8")?>
-                            </div>
-                            <?php if (!empty($v0->ident_extrato)) : ?>
-                                <div class="motivo-mini text-primary" title="Identificação no extrato">
-                                    <?=htmlspecialchars(trim((string)$v0->ident_extrato), ENT_QUOTES, "UTF-8")?>
+                            <?php foreach ($vincs as $vi => $v0) : ?>
+                                <?php if ($vi > 2) break; ?>
+                                <div class="mb-1">
+                                    <span class="conf-pill <?=((int)$v0->confianca_match >= 85 ? "conf-alta" : (((int)$v0->confianca_match >= 50) ? "conf-media" : "conf-baixa"))?>">
+                                        <?=(int)$v0->confianca_match?>%
+                                    </span>
+                                    <?php if (($v0->origem ?? "") === "manual") : ?>
+                                        <span class="badge text-bg-primary">manual</span>
+                                    <?php endif ?>
+                                    <div class="motivo-mini" title="<?=htmlspecialchars((string)($v0->contraparte ?: $v0->nome_original), ENT_QUOTES, "UTF-8")?>">
+                                        <?=htmlspecialchars((string)($v0->contraparte ?: $v0->nome_original), ENT_QUOTES, "UTF-8")?>
+                                    </div>
                                 </div>
-                            <?php endif ?>
-                            <?php if (!empty($v0->contraparte)) : ?>
-                                <div class="motivo-mini"><?=htmlspecialchars((string)$v0->contraparte, ENT_QUOTES, "UTF-8")?></div>
+                            <?php endforeach ?>
+                            <?php if (count($vincs) > 3) : ?>
+                                <div class="text-muted">+<?=count($vincs) - 3?> mais</div>
                             <?php endif ?>
                         <?php else : ?>
                             <span class="text-muted">—</span>

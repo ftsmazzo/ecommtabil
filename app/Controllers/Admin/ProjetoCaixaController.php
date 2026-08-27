@@ -45,9 +45,12 @@ class ProjetoCaixaController extends ControllerAdmin
         $sessaoId = (int) (($request->all()["sessao"] ?? 0));
         $sessao = null;
         $movimentos = [];
+        $movimentosTodos = [];
         $resumo = null;
         $recibos = [];
         $vinculosPorMov = [];
+        $vinculosPorRec = [];
+        $conferencia = null;
 
         if ($sessaoId > 0) {
             $sessao = CaixaSessao::findAtiva($sessaoId, (int) $projeto->id);
@@ -58,7 +61,11 @@ class ProjetoCaixaController extends ControllerAdmin
         if ($sessao) {
             $filtro = trim((string) (($request->all()["status"] ?? "")));
             $faixa = trim((string) (($request->all()["faixa"] ?? "")));
-            $movimentos = CaixaMovimento::porSessao((int) $sessao->id, $filtro !== "" ? $filtro : null);
+            $movimentosTodos = CaixaMovimento::porSessao((int) $sessao->id, null);
+            $movimentos = $movimentosTodos;
+            if ($filtro !== "") {
+                $movimentos = array_values(array_filter($movimentos, static fn ($m) => (string) $m->status === $filtro));
+            }
             if ($faixa !== "") {
                 $movimentos = array_values(array_filter($movimentos, static function ($m) use ($faixa) {
                     $c = (int) ($m->confianca_conta ?? 0);
@@ -74,6 +81,8 @@ class ProjetoCaixaController extends ControllerAdmin
             $resumo = CaixaMovimento::resumoPorSessao((int) $sessao->id);
             $recibos = CaixaRecibo::porSessao((int) $sessao->id);
             $vinculosPorMov = $this->vinculosPorMovimento((int) $sessao->id);
+            $vinculosPorRec = $this->vinculosPorRecibo($vinculosPorMov);
+            $conferencia = (new CaixaReciboService())->conferencia((int) $sessao->id);
         }
 
         $contas = DreConta::analiticasLista("dfc");
@@ -103,9 +112,12 @@ class ProjetoCaixaController extends ControllerAdmin
             "sessoes"         => $sessoes,
             "sessao"          => $sessao,
             "movimentos"      => $movimentos,
+            "movimentosTodos" => $movimentosTodos,
             "resumo"          => $resumo,
             "recibos"         => $recibos,
             "vinculosPorMov"  => $vinculosPorMov,
+            "vinculosPorRec"  => $vinculosPorRec,
+            "conferencia"     => $conferencia,
             "contas"          => $contas,
             "contasMap"       => $contasMap,
             "filtro"          => trim((string) (($request->all()["status"] ?? ""))),
@@ -363,6 +375,78 @@ class ProjetoCaixaController extends ControllerAdmin
         $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
     }
 
+    public function vincularRecibo(Request $request): void
+    {
+        $this->authorize("projeto_gerenciar");
+        $projeto = $this->carregarProjeto($request, true);
+        if (!$projeto) {
+            return;
+        }
+
+        $data = new Data($request->all());
+        $sessao = CaixaSessao::findAtiva((int) ($data->sessao_id ?? 0), (int) $projeto->id);
+        $idRec = (int) ($data->recibo_id ?? 0);
+        $idMov = (int) ($data->movimento_id ?? 0);
+        if (!$sessao || $idRec < 1 || $idMov < 1) {
+            $this->message->warning("Selecione o comprovante e o movimento do extrato.");
+            $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+            return;
+        }
+
+        $ok = (new CaixaReciboService())->vincularManual((int) $sessao->id, $idRec, $idMov);
+        if ($ok) {
+            $this->message->success("Comprovante vinculado manualmente ao lançamento.");
+        } else {
+            $this->message->warning("Não foi possível vincular. Confira se recibo e movimento pertencem à sessão.");
+        }
+        $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id, "sessao" => $sessao->id]);
+    }
+
+    public function desvincularRecibo(Request $request): void
+    {
+        $this->authorize("projeto_gerenciar");
+        $projeto = $this->carregarProjeto($request, true);
+        if (!$projeto) {
+            return;
+        }
+
+        $data = new Data($request->all());
+        $sessao = CaixaSessao::findAtiva((int) ($data->sessao_id ?? 0), (int) $projeto->id);
+        $idVinculo = (int) ($data->vinculo_id ?? 0);
+        if (!$sessao || $idVinculo < 1) {
+            $this->message->warning("Vínculo inválido.");
+            $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+            return;
+        }
+
+        $ok = (new CaixaReciboService())->desvincular((int) $sessao->id, $idVinculo);
+        $this->message->{$ok ? "success" : "warning"}(
+            $ok ? "Vínculo removido. Você pode religar no de-para." : "Vínculo não encontrado."
+        );
+        $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id, "sessao" => $sessao->id]);
+    }
+
+    public function recrossarRecibos(Request $request): void
+    {
+        $this->authorize("projeto_gerenciar");
+        $projeto = $this->carregarProjeto($request, true);
+        if (!$projeto) {
+            return;
+        }
+
+        $data = new Data($request->all());
+        $sessao = CaixaSessao::findAtiva((int) ($data->sessao_id ?? 0), (int) $projeto->id);
+        if (!$sessao) {
+            $this->message->warning("Sessão inválida.");
+            $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+            return;
+        }
+
+        $n = (new CaixaReciboService())->cruzarSessao((int) $sessao->id);
+        $this->message->success("Recruzamento: {$n} novo(s) vínculo(s) automático(s). Vínculos manuais foram preservados.");
+        $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id, "sessao" => $sessao->id]);
+    }
+
     private function acaoMovimento(Request $request, string $acao): void
     {
         $projeto = $this->carregarProjeto($request, true);
@@ -404,8 +488,9 @@ class ProjetoCaixaController extends ControllerAdmin
     private function vinculosPorMovimento(int $idSessao): array
     {
         $rows = DB::execute(
-            "SELECT v.id, v.id_movimento, v.id_recibo, v.confianca_match, v.status, v.motivo,
-                    r.nome_original, r.valor AS recibo_valor, r.ident_extrato, r.contraparte
+            "SELECT v.id, v.id_movimento, v.id_recibo, v.confianca_match, v.status, v.motivo, v.origem,
+                    r.nome_original, r.valor AS recibo_valor, r.ident_extrato, r.contraparte,
+                    r.data_doc AS recibo_data
              FROM caixa_vinculo v
              INNER JOIN caixa_movimento m ON m.id = v.id_movimento AND m.id_sessao = ? AND m.trash = 0
              INNER JOIN caixa_recibo r ON r.id = v.id_recibo AND r.trash = 0
@@ -417,6 +502,21 @@ class ProjetoCaixaController extends ControllerAdmin
         $out = [];
         foreach ($rows as $r) {
             $out[(int) $r->id_movimento][] = $r;
+        }
+        return $out;
+    }
+
+    /**
+     * @param array<int,array<int,object>> $vinculosPorMov
+     * @return array<int,object> id_recibo => vínculo
+     */
+    private function vinculosPorRecibo(array $vinculosPorMov): array
+    {
+        $out = [];
+        foreach ($vinculosPorMov as $lista) {
+            foreach ($lista as $v) {
+                $out[(int) $v->id_recibo] = $v;
+            }
         }
         return $out;
     }
