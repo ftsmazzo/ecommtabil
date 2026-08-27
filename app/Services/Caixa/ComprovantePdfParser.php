@@ -17,9 +17,9 @@ class ComprovantePdfParser
      *   valor:?float,data:?string,contraparte:?string,ident_extrato:?string,texto:string
      * }>
      */
-    public function parseFile(string $path): array
+    public function parseFile(string $path, string $nomeOriginal = ""): array
     {
-        $text = $this->extractor->extract($path);
+        $text = $this->extractor->extract($path, $nomeOriginal);
         if ($text === "") {
             throw new \RuntimeException("Não foi possível ler texto do PDF de comprovantes.");
         }

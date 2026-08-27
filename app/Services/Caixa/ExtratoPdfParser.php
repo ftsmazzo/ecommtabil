@@ -19,9 +19,9 @@ class ExtratoPdfParser
      *   movimentos:array<int,array{fitid:string,data_posted:string,tipo:string,valor:float,memo:string}>
      * }
      */
-    public function parseFile(string $path): array
+    public function parseFile(string $path, string $nomeOriginal = ""): array
     {
-        $text = $this->extractor->extract($path);
+        $text = $this->extractor->extract($path, $nomeOriginal);
         if ($text === "") {
             throw new \RuntimeException("Não foi possível ler texto do PDF do extrato.");
         }

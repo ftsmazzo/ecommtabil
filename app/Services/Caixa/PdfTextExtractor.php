@@ -2,17 +2,40 @@
 
 namespace App\Services\Caixa;
 
+use App\Lib\OpenRouter;
+
 /**
- * Extrai texto de PDFs digitais (extrato/comprovante Itaú).
+ * Extrai texto de PDFs. Base: OpenRouter + Mistral OCR.
+ * Local (smalot) só se a chave OpenRouter não estiver configurada.
  */
 class PdfTextExtractor
 {
-    public function extract(string $path): string
+    public function extract(string $path, string $nomeOriginal = ""): string
     {
         if (!is_readable($path)) {
             return "";
         }
 
+        if (OpenRouter::disponivel()) {
+            try {
+                $or = new OpenRouter();
+                $out = $or->extrairTextoPdf($path, $nomeOriginal !== "" ? $nomeOriginal : basename($path));
+                if (!empty($out["ok"]) && trim((string) ($out["text"] ?? "")) !== "") {
+                    return $this->normalizar((string) $out["text"]);
+                }
+                // Falha do provedor: tenta local para não quebrar o fluxo
+                $err = (string) ($out["error"] ?? "sem texto");
+                error_log("[PdfTextExtractor] OpenRouter falhou: " . $err);
+            } catch (\Throwable $e) {
+                error_log("[PdfTextExtractor] OpenRouter exceção: " . $e->getMessage());
+            }
+        }
+
+        return $this->extrairLocal($path);
+    }
+
+    private function extrairLocal(string $path): string
+    {
         if (class_exists(\Smalot\PdfParser\Parser::class)) {
             try {
                 $parser = new \Smalot\PdfParser\Parser();
@@ -22,7 +45,7 @@ class PdfTextExtractor
                     return $this->normalizar($text);
                 }
             } catch (\Throwable) {
-                // fallback abaixo
+                // fallback bruto
             }
         }
 
@@ -52,7 +75,6 @@ class PdfTextExtractor
             return $texto;
         }
 
-        // Stream UTF-16 / texto solto em PDFs bancários
         if (preg_match_all('/[\x20-\x7E\xC0-\xFF]{4,}/', $raw, $m2)) {
             return $this->normalizar(implode("\n", array_slice($m2[0], 0, 5000)));
         }

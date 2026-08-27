@@ -25,7 +25,7 @@ class CaixaSessaoService
     {
         $ext = strtolower(pathinfo($nomeOriginal, PATHINFO_EXTENSION));
         if ($ext === "pdf" || strtolower(pathinfo($caminhoArquivo, PATHINFO_EXTENSION)) === "pdf") {
-            $parsed = $this->pdfParser->parseFile($caminhoArquivo);
+            $parsed = $this->pdfParser->parseFile($caminhoArquivo, $nomeOriginal);
             $formato = "pdf";
         } else {
             $parsed = $this->ofxParser->parseFile($caminhoArquivo);

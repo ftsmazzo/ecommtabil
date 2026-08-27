@@ -51,14 +51,14 @@ class CaixaReciboService
 
             if ($ext === "pdf") {
                 try {
-                    $itens = $this->comprovanteParser->parseFile($destino);
+                    $itens = $this->comprovanteParser->parseFile($destino, $nome);
                 } catch (\Throwable $e) {
                     $itens = [[
                         "valor"         => null,
                         "data"          => null,
                         "contraparte"   => null,
                         "ident_extrato" => null,
-                        "texto"         => $this->extractor->extract($destino),
+                        "texto"         => $this->extractor->extract($destino, $nome),
                     ]];
                     $avisos[] = "PDF {$nome}: parse parcial — " . $e->getMessage();
                 }
@@ -66,7 +66,7 @@ class CaixaReciboService
                 if ($itens === []) {
                     $itens = [[
                         "valor" => null, "data" => null, "contraparte" => null,
-                        "ident_extrato" => null, "texto" => $this->extractor->extract($destino),
+                        "ident_extrato" => null, "texto" => $this->extractor->extract($destino, $nome),
                     ]];
                 }
 
