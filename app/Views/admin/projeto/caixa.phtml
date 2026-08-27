@@ -41,6 +41,9 @@ $filtroRecibo = $filtroRecibo ?? "pendentes";
 $cf = $conferencia ?? null;
 $baseQ = $sessao ? ["id" => $projeto->id, "sessao" => $sessao->id] : ["id" => $projeto->id];
 $pendRec = (int)(($cf["recibos_sem_vinculo"] ?? 0));
+$okRec = (int)(($cf["recibos_ok"] ?? $cf["recibos_vinculados"] ?? 0));
+$sugRec = (int)(($cf["recibos_sugeridos"] ?? 0));
+$totalRecBar = (int)(($cf["recibos"] ?? 0));
 // sugeridos ainda não confirmados ≈ recibos - validados - sem vínculo, aproximado via lista filtrada
 ?>
 
@@ -78,7 +81,11 @@ $pendRec = (int)(($cf["recibos_sem_vinculo"] ?? 0));
     <div><span class="text-muted">Aprovados</span><br><strong class="text-success"><?=$totApr?></strong></div>
     <div><span class="text-muted">Entradas</span><br><strong class="text-success">R$ <?=number_format($totCred, 2, ",", ".")?></strong></div>
     <div><span class="text-muted">Saídas</span><br><strong class="text-danger">R$ <?=number_format(abs($totDeb), 2, ",", ".")?></strong></div>
-    <div><span class="text-muted">Comprovantes</span><br><strong><?=(int)($cf["recibos_vinculados"] ?? 0)?>/<?=(int)($cf["recibos"] ?? 0)?></strong> <span class="text-muted small">ok</span><?php if ($pendRec > 0) : ?> · <span class="text-danger"><?=$pendRec?> sem vínculo</span><?php endif ?></div>
+    <div><span class="text-muted">Comprovantes</span><br>
+        <strong><?=$okRec?>/<?=$totalRecBar?></strong> <span class="text-muted small">feitos</span>
+        <?php if ($sugRec > 0) : ?> · <span class="text-info"><?=$sugRec?> sugeridos</span><?php endif ?>
+        <?php if ($pendRec > 0) : ?> · <span class="text-danger"><?=$pendRec?> sem vínculo</span><?php endif ?>
+    </div>
     <div class="ms-auto d-flex flex-wrap gap-1">
         <form action="<?=$router->route("admin.projeto.caixa.recibos", ["id" => $projeto->id])?>" method="POST" enctype="multipart/form-data" class="d-flex gap-1">
             <input type="hidden" name="csrf" value="<?=$csrf?>">
@@ -142,8 +149,7 @@ $pendRec = (int)(($cf["recibos_sem_vinculo"] ?? 0));
                 <?php
                     $vRec = $vinculosPorRec[(int)$rec->id] ?? null;
                     $label = trim((string)($rec->contraparte ?: $rec->nome_original));
-                    $stV = $vRec ? (string)($vRec->status ?? "") : "";
-                    $validado = $vRec && ((($vRec->origem ?? "") === "manual") || in_array($stV, ["confirmado","aprovado"], true));
+                    $validado = \App\Services\Caixa\CaixaReciboService::vinculoValidado($vRec);
                 ?>
                 <tr class="<?=$vRec ? ($validado ? "" : "table-info") : "table-warning"?>">
                     <td class="small">

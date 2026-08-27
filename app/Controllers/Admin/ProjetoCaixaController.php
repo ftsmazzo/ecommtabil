@@ -101,8 +101,28 @@ class ProjetoCaixaController extends ControllerAdmin
             $recibosTodos = CaixaRecibo::porSessao((int) $sessao->id);
             $recibos = $recibosTodos;
             $vinculosPorMov = $this->vinculosPorMovimento((int) $sessao->id);
-            $vinculosPorRec = $this->vinculosPorRecibo($vinculosPorMov);
+            $vinculosPorRec = $this->vinculosPorRecibo((int) $sessao->id);
             $conferencia = (new CaixaReciboService())->conferencia((int) $sessao->id);
+
+            // Barra de comprovantes: mesma fonte da lista (não só o SQL agregado)
+            $recOk = 0;
+            $recSug = 0;
+            $recSem = 0;
+            foreach ($recibosTodos as $recRow) {
+                $vr = $vinculosPorRec[(int) $recRow->id] ?? null;
+                if ($vr === null) {
+                    $recSem++;
+                } elseif (CaixaReciboService::vinculoValidado($vr)) {
+                    $recOk++;
+                } else {
+                    $recSug++;
+                }
+            }
+            $conferencia["recibos"] = count($recibosTodos);
+            $conferencia["recibos_ok"] = $recOk;
+            $conferencia["recibos_sugeridos"] = $recSug;
+            $conferencia["recibos_vinculados"] = $recOk + $recSug;
+            $conferencia["recibos_sem_vinculo"] = $recSem;
 
             // Totais da barra: sempre a partir dos movimentos da sessão (não depende só de conferencia)
             $totaisBarra = [
@@ -145,29 +165,22 @@ class ProjetoCaixaController extends ControllerAdmin
             if ($filtroRecibo !== "todos") {
                 $recibos = array_values(array_filter($recibos, static function ($rec) use ($filtroRecibo, $vinculosPorRec) {
                     $v = $vinculosPorRec[(int) $rec->id] ?? null;
+                    $validado = CaixaReciboService::vinculoValidado($v);
                     if ($filtroRecibo === "pendentes" || $filtroRecibo === "sem") {
-                        // pendentes = sem vínculo OU ainda sugerido (não confirmado)
                         if ($v === null) {
                             return true;
                         }
                         if ($filtroRecibo === "sem") {
                             return false;
                         }
-                        $st = (string) ($v->status ?? "");
-                        $origem = (string) ($v->origem ?? "");
-                        $validado = $origem === "manual" || in_array($st, ["confirmado", "aprovado"], true);
+                        // Fila: só sem confirmação (sugeridos). Feitos saem daqui.
                         return !$validado;
                     }
                     if ($filtroRecibo === "sugerido") {
-                        return $v !== null && (string) ($v->status ?? "") === "sugerido";
+                        return $v !== null && !$validado;
                     }
                     if ($filtroRecibo === "validado") {
-                        if ($v === null) {
-                            return false;
-                        }
-                        $st = (string) ($v->status ?? "");
-                        $origem = (string) ($v->origem ?? "");
-                        return $origem === "manual" || in_array($st, ["confirmado", "aprovado"], true);
+                        return $validado;
                     }
                     return true;
                 }));
@@ -746,15 +759,32 @@ class ProjetoCaixaController extends ControllerAdmin
     }
 
     /**
-     * @param array<int,array<int,object>> $vinculosPorMov
+     * Vínculos indexados por recibo (pelo lado do recibo da sessão).
+     *
      * @return array<int,object> id_recibo => vínculo
      */
-    private function vinculosPorRecibo(array $vinculosPorMov): array
+    private function vinculosPorRecibo(int $idSessao): array
     {
+        $rows = DB::execute(
+            "SELECT v.id, v.id_movimento, v.id_recibo, v.confianca_match, v.status, v.motivo, v.origem,
+                    r.nome_original, r.valor AS recibo_valor, r.ident_extrato, r.contraparte,
+                    r.data_doc AS recibo_data
+             FROM caixa_vinculo v
+             INNER JOIN caixa_recibo r ON r.id = v.id_recibo AND r.id_sessao = ? AND r.trash = 0
+             WHERE v.trash = 0
+             ORDER BY
+                CASE WHEN v.origem = 'manual' OR v.status IN ('confirmado','aprovado') THEN 0 ELSE 1 END,
+                v.confianca_match DESC,
+                v.id DESC",
+            [$idSessao]
+        );
+
         $out = [];
-        foreach ($vinculosPorMov as $lista) {
-            foreach ($lista as $v) {
-                $out[(int) $v->id_recibo] = $v;
+        foreach ($rows as $r) {
+            $idRec = (int) $r->id_recibo;
+            // Preferência: o primeiro da ordenação (validado > sugerido)
+            if (!isset($out[$idRec])) {
+                $out[$idRec] = $r;
             }
         }
         return $out;

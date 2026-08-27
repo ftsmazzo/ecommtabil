@@ -280,14 +280,22 @@ class CaixaReciboService
         );
         $r = $rec[0] ?? null;
 
+        // Conta pelo lado do recibo (não exige join no movimento) — evita "0 ok" com linhas OK na tela
         $vinc = DB::execute(
             "SELECT
                 COUNT(DISTINCT v.id_recibo) AS recibos_vinculados,
+                COUNT(DISTINCT CASE
+                    WHEN v.origem = 'manual' OR v.status IN ('confirmado','aprovado') THEN v.id_recibo
+                END) AS recibos_ok,
+                COUNT(DISTINCT CASE
+                    WHEN v.origem <> 'manual'
+                     AND (v.status IS NULL OR v.status NOT IN ('confirmado','aprovado'))
+                    THEN v.id_recibo
+                END) AS recibos_sugeridos,
                 COUNT(DISTINCT v.id_movimento) AS movs_com_recibo,
                 COUNT(v.id) AS vinculos
              FROM caixa_vinculo v
-             INNER JOIN caixa_movimento m ON m.id = v.id_movimento AND m.id_sessao = ? AND m.trash = 0
-             INNER JOIN caixa_recibo r ON r.id = v.id_recibo AND r.trash = 0
+             INNER JOIN caixa_recibo r ON r.id = v.id_recibo AND r.id_sessao = ? AND r.trash = 0
              WHERE v.trash = 0",
             [$idSessao]
         );
@@ -295,6 +303,8 @@ class CaixaReciboService
 
         $qtdRec = (int) ($r->qtd ?? 0);
         $recVinc = (int) ($v->recibos_vinculados ?? 0);
+        $recOk = (int) ($v->recibos_ok ?? 0);
+        $recSug = (int) ($v->recibos_sugeridos ?? 0);
 
         return [
             "movimentos"           => $qtd,
@@ -308,6 +318,8 @@ class CaixaReciboService
             "pendentes"            => (int) ($t->pendentes ?? 0),
             "recibos"              => $qtdRec,
             "recibos_vinculados"   => $recVinc,
+            "recibos_ok"           => $recOk,
+            "recibos_sugeridos"    => $recSug,
             "recibos_sem_vinculo"  => max(0, $qtdRec - $recVinc),
             "movs_com_recibo"      => (int) ($v->movs_com_recibo ?? 0),
             "vinculos"             => (int) ($v->vinculos ?? 0),
@@ -464,6 +476,7 @@ class CaixaReciboService
             ->where("id", "=", $idVinculo)
             ->update([
                 "status"          => "confirmado",
+                "origem"          => "manual",
                 "confianca_match" => 100,
                 "motivo"          => "Confirmado no cruzamento",
             ]);
@@ -507,8 +520,12 @@ class CaixaReciboService
             ->first();
 
         if ($existe) {
-            // Não sobrescreve vínculo manual
-            if (($existe->origem ?? "") === "manual" && (int) ($existe->trash ?? 0) === 0) {
+            // Não sobrescreve vínculo manual ativo (exceto quando o próprio fluxo manual chama de novo)
+            if (
+                $origem !== "manual"
+                && ($existe->origem ?? "") === "manual"
+                && (int) ($existe->trash ?? 0) === 0
+            ) {
                 return false;
             }
             DB::table("caixa_vinculo")
@@ -520,7 +537,7 @@ class CaixaReciboService
                     "origem"          => $origem,
                     "trash"           => 0,
                 ]);
-            return (int) ($existe->trash ?? 0) === 1;
+            return true;
         }
 
         DB::table("caixa_vinculo")->insert([
@@ -540,6 +557,17 @@ class CaixaReciboService
         }
 
         return true;
+    }
+
+    /** Vínculo já conferido pelo usuário (manual ou confirmado). */
+    public static function vinculoValidado(?object $v): bool
+    {
+        if ($v === null) {
+            return false;
+        }
+        $origem = strtolower(trim((string) ($v->origem ?? "")));
+        $st = strtolower(trim((string) ($v->status ?? "")));
+        return $origem === "manual" || in_array($st, ["confirmado", "aprovado"], true);
     }
 
     private function scoreMatch(object $mov, object $rec): int
