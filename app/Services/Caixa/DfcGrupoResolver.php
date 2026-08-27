@@ -70,7 +70,7 @@ class DfcGrupoResolver
         $normNome = self::norm($nomeConta);
         $normGrupo = self::norm($grupo);
         foreach (self::$cacheGrupoRaiz as $key => $id) {
-            if (str_starts_with($key, $normGrupo . "|") && str_ends_with($key, "|" . $normNome)) {
+            if ($key === $normGrupo . "|" . $normNome) {
                 return $id;
             }
         }
