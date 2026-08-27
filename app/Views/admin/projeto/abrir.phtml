@@ -35,19 +35,11 @@
         color: #0d6efd;
         border-bottom-color: #0d6efd;
     }
+    .projeto-nav { flex-wrap: wrap; }
 </style>
 <?php $this->end() ?>
 
-<nav class="projeto-nav">
-    <a href="<?=$router->route("admin.projeto.abrir", ["id" => $projeto->id])?>"
-       class="projeto-nav-link <?=$aba === "visao-geral" ? "active" : ""?>">
-        <i class="uil uil-chart-pie me-1"></i>Visão Geral
-    </a>
-    <a href="<?=$router->route("admin.projeto.importacao", ["id" => $projeto->id])?>"
-       class="projeto-nav-link <?=$aba === "importacao" ? "active" : ""?>">
-        <i class="uil uil-import me-1"></i>Importação de Dados
-    </a>
-</nav>
+<?php $this->insert("admin/projeto/_nav", ["projeto" => $projeto, "aba" => $aba]) ?>
 
 <div class="row g-3">
     <?php $hasData = false; ?>
@@ -89,10 +81,15 @@
                     <span style="font-size:3rem;line-height:1;color:#0d6efd;"><i class="uil uil-chart-growth"></i></span>
                 </div>
                 <h5 class="mb-1">Dados ainda não importados</h5>
-                <p class="text-muted mb-4 small">Importe seus dados financeiros para começar a visualizar o DRE, DFC e BP.</p>
-                <a href="<?=$router->route("admin.projeto.importacao", ["id" => $projeto->id])?>" class="btn btn-primary btn-sm">
-                    <i class="uil uil-import me-1"></i>Importar Dados
-                </a>
+                <p class="text-muted mb-4 small">Importe planilhas ou monte o DFC a partir do extrato bancário.</p>
+                <div class="d-flex flex-wrap gap-2 justify-content-center">
+                    <a href="<?=$router->route("admin.projeto.importacao", ["id" => $projeto->id])?>" class="btn btn-primary btn-sm">
+                        <i class="uil uil-import me-1"></i>Importar Dados
+                    </a>
+                    <a href="<?=$router->route("admin.projeto.caixa", ["id" => $projeto->id])?>" class="btn btn-outline-primary btn-sm">
+                        <i class="uil uil-money-withdraw me-1"></i>Montar DFC
+                    </a>
+                </div>
             </div>
         </div>
     </div>

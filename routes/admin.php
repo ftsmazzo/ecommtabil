@@ -149,6 +149,11 @@ $router->namespace("\App\Controllers\Admin")->group(null);
     $router->post("/projetos/{id}/importacao/mapear/simular", "ProjetoController:simularDados", "admin.projeto.importacao.mapear.simular");
     $router->post("/projetos/{id}/importacao/processar", "ProjetoController:processarDados", "admin.projeto.importacao.processar");
 
+    // MONTAR DFC (extrato OFX + recibos → conferência → DFC)
+    $router->get("/projetos/{id}/caixa", "ProjetoCaixaController:index", "admin.projeto.caixa");
+    $router->post("/projetos/{id}/caixa/extrato", "ProjetoCaixaController:uploadExtrato", "admin.projeto.caixa.upload");
+    $router->post("/projetos/{id}/caixa/arquivar", "ProjetoCaixaController:arquivarSessao", "admin.projeto.caixa.arquivar");
+
     // EMPRESAS
     $router->get("/empresas", "EmpresaController:index", "admin.empresa.index");
     $router->get("/empresas/novo", "EmpresaController:new", "admin.empresa.novo");

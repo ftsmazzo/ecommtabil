@@ -1,0 +1,18 @@
+<?php
+/** @var object $projeto */
+/** @var string $aba */
+?>
+<nav class="projeto-nav">
+    <a href="<?=$router->route("admin.projeto.abrir", ["id" => $projeto->id])?>"
+       class="projeto-nav-link <?=$aba === "visao-geral" ? "active" : ""?>">
+        <i class="uil uil-chart-pie me-1"></i>Visão Geral
+    </a>
+    <a href="<?=$router->route("admin.projeto.importacao", ["id" => $projeto->id])?>"
+       class="projeto-nav-link <?=$aba === "importacao" ? "active" : ""?>">
+        <i class="uil uil-import me-1"></i>Importação de Dados
+    </a>
+    <a href="<?=$router->route("admin.projeto.caixa", ["id" => $projeto->id])?>"
+       class="projeto-nav-link <?=$aba === "montar-dfc" ? "active" : ""?>">
+        <i class="uil uil-money-withdraw me-1"></i>Montar DFC
+    </a>
+</nav>

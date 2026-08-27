@@ -1,0 +1,312 @@
+<?php $this->layout("app/template/base"); ?>
+
+<?php $this->start("page-actions") ?>
+    <?php if ($permissao["editar"]) : ?>
+        <button type="button" class="btn btn-white btn-sm" data-bs-toggle="modal" data-bs-target="#modal-editar-projeto-abrir">
+            <i class="uil uil-edit-alt"></i> Editar
+        </button>
+    <?php endif ?>
+<?php $this->end() ?>
+
+<?php $this->start("styles") ?>
+<link rel="stylesheet" href="<?=asset("dist/bootstrap-select/bootstrap-select.min.css")?>">
+<style>
+    .projeto-nav {
+        display: flex;
+        gap: .25rem;
+        border-bottom: 2px solid #e9ecef;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+    }
+    .projeto-nav-link {
+        padding: .5rem 1rem;
+        border-radius: .375rem .375rem 0 0;
+        font-size: .875rem;
+        font-weight: 500;
+        color: #6c757d;
+        text-decoration: none;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -2px;
+        transition: color .15s, border-color .15s;
+    }
+    .projeto-nav-link:hover { color: #343a40; }
+    .projeto-nav-link.active { color: #0d6efd; border-bottom-color: #0d6efd; }
+
+    .conf-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .25rem;
+        font-weight: 600;
+        font-size: .75rem;
+        padding: .2rem .5rem;
+        border-radius: .375rem;
+    }
+    .conf-alta { background: rgba(25,135,84,.12); color: #198754; }
+    .conf-media { background: rgba(255,193,7,.2); color: #997404; }
+    .conf-baixa { background: rgba(220,53,69,.12); color: #dc3545; }
+    .conf-none { background: #f1f3f5; color: #6c757d; }
+
+    .caixa-steps {
+        display: flex;
+        gap: .5rem;
+        flex-wrap: wrap;
+        margin-bottom: 1rem;
+    }
+    .caixa-step {
+        font-size: .8rem;
+        padding: .35rem .75rem;
+        border-radius: 2rem;
+        background: #f8f9fa;
+        color: #6c757d;
+        border: 1px solid #e9ecef;
+    }
+    .caixa-step.on {
+        background: rgba(13,110,253,.1);
+        color: #0d6efd;
+        border-color: rgba(13,110,253,.25);
+        font-weight: 600;
+    }
+    .caixa-step.done {
+        background: rgba(25,135,84,.1);
+        color: #198754;
+        border-color: rgba(25,135,84,.25);
+    }
+    .mov-valor-pos { color: #198754; font-weight: 600; }
+    .mov-valor-neg { color: #dc3545; font-weight: 600; }
+    .caixa-table td { vertical-align: middle; }
+</style>
+<?php $this->end() ?>
+
+<?php $this->insert("admin/projeto/_nav", ["projeto" => $projeto, "aba" => $aba]) ?>
+
+<div class="alert alert-primary border-0 mb-4">
+    <div class="fw-semibold mb-1">Você está montando o Fluxo de Caixa (DFC)</div>
+    <p class="small mb-0">
+        Suba o <strong>extrato OFX</strong> primeiro. Em seguida virão os recibos e a conferência com confiança.
+        Só o que for <strong>aprovado</strong> entra no mesmo DFC do projeto (igual à importação por planilha).
+    </p>
+</div>
+
+<div class="caixa-steps">
+    <span class="caixa-step <?=!$sessao ? "on" : "done"?>">1. Extrato</span>
+    <span class="caixa-step <?=$sessao ? "on" : ""?>">2. Recibos <span class="text-muted">(em breve)</span></span>
+    <span class="caixa-step">3. Conferir</span>
+    <span class="caixa-step">4. Gerar DFC</span>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-12 col-lg-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <h6 class="mb-2">1. Enviar extrato (OFX)</h6>
+                <p class="small text-muted mb-3">
+                    Arquivo do banco com as movimentações. O sistema identifica data, valor e histórico.
+                </p>
+                <form action="<?=$router->route("admin.projeto.caixa.upload", ["id" => $projeto->id])?>"
+                      method="POST" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf" value="<?=$csrf?>">
+                    <input type="file" name="arquivo" accept=".ofx,application/x-ofx,application/ofx" class="form-control form-control-sm mb-2" required>
+                    <button type="submit" class="btn btn-primary btn-sm w-100">
+                        <i class="uil uil-upload me-1"></i>Ler extrato
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-lg-8">
+        <?php if ($resumo && $sessao) : ?>
+        <div class="row g-2">
+            <div class="col-6 col-md-3">
+                <div class="card border-0 bg-light">
+                    <div class="card-body py-3 text-center">
+                        <div class="fs-4 fw-bold"><?=number_format((int) $resumo->total, 0, ",", ".")?></div>
+                        <div class="small text-muted">Movimentos</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card border-0 bg-light">
+                    <div class="card-body py-3 text-center">
+                        <div class="fs-5 fw-bold text-success">R$ <?=number_format((float) $resumo->creditos, 2, ",", ".")?></div>
+                        <div class="small text-muted">Entradas</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card border-0 bg-light">
+                    <div class="card-body py-3 text-center">
+                        <div class="fs-5 fw-bold text-danger">R$ <?=number_format(abs((float) $resumo->debitos), 2, ",", ".")?></div>
+                        <div class="small text-muted">Saídas</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card border-0 bg-light">
+                    <div class="card-body py-3 text-center">
+                        <div class="fs-4 fw-bold text-secondary"><?=number_format((int) $resumo->aprovado, 0, ",", ".")?></div>
+                        <div class="small text-muted">Aprovados</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="small text-muted mt-2">
+            <?php if ($sessao->banco_nome) : ?>
+                <?=htmlspecialchars((string) $sessao->banco_nome, ENT_QUOTES, "UTF-8")?>
+                <?php if ($sessao->conta) : ?> · conta <?=htmlspecialchars((string) $sessao->conta, ENT_QUOTES, "UTF-8")?><?php endif ?>
+                ·
+            <?php endif ?>
+            período <?=date("d/m/Y", strtotime((string) $sessao->periodo_inicio))?>
+            a <?=date("d/m/Y", strtotime((string) $sessao->periodo_fim))?>
+            · arquivo <?=htmlspecialchars((string) ($sessao->arquivo_original ?: $sessao->arquivo_extrato), ENT_QUOTES, "UTF-8")?>
+        </div>
+        <?php else : ?>
+        <div class="card h-100 border-dashed">
+            <div class="card-body d-flex align-items-center justify-content-center text-center text-muted">
+                <div>
+                    <div style="font-size:2rem;color:#0d6efd;"><i class="uil uil-bill"></i></div>
+                    <p class="mb-0 small">Ainda sem extrato neste projeto.<br>Envie o OFX para começar a montar o DFC.</p>
+                </div>
+            </div>
+        </div>
+        <?php endif ?>
+    </div>
+</div>
+
+<?php if ($sessoes) : ?>
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+    <span class="small text-muted">Sessão:</span>
+    <?php foreach ($sessoes as $s) : ?>
+        <a href="<?=$router->route("admin.projeto.caixa", ["id" => $projeto->id, "sessao" => $s->id])?>"
+           class="btn btn-sm <?=($sessao && (int)$sessao->id === (int)$s->id) ? "btn-primary" : "btn-outline-secondary"?>">
+            #<?=(int)$s->id?>
+            · <?=date("d/m/Y", strtotime((string) $s->periodo_inicio))?>–<?=date("d/m/Y", strtotime((string) $s->periodo_fim))?>
+            · <?=(int)$s->total_movimentos?> mov.
+        </a>
+    <?php endforeach ?>
+    <?php if ($sessao) : ?>
+    <form action="<?=$router->route("admin.projeto.caixa.arquivar", ["id" => $projeto->id])?>" method="POST" class="ms-auto"
+          onsubmit="return confirm('Arquivar esta sessão? Os movimentos deixam de aparecer aqui.');">
+        <input type="hidden" name="csrf" value="<?=$csrf?>">
+        <input type="hidden" name="sessao_id" value="<?=(int)$sessao->id?>">
+        <button type="submit" class="btn btn-outline-danger btn-sm">Arquivar sessão</button>
+    </form>
+    <?php endif ?>
+</div>
+<?php endif ?>
+
+<?php if ($sessao && $movimentos) : ?>
+<div class="card">
+    <div class="card-header d-flex flex-wrap align-items-center gap-2 bg-white">
+        <strong class="me-auto">Movimentos do extrato</strong>
+        <a href="<?=$router->route("admin.projeto.caixa", ["id" => $projeto->id, "sessao" => $sessao->id])?>"
+           class="btn btn-sm <?=$filtro === "" ? "btn-dark" : "btn-outline-secondary"?>">Todos</a>
+        <a href="<?=$router->route("admin.projeto.caixa", ["id" => $projeto->id, "sessao" => $sessao->id, "status" => "novo"])?>"
+           class="btn btn-sm <?=$filtro === "novo" ? "btn-dark" : "btn-outline-secondary"?>">Novos</a>
+        <a href="<?=$router->route("admin.projeto.caixa", ["id" => $projeto->id, "sessao" => $sessao->id, "status" => "aprovado"])?>"
+           class="btn btn-sm <?=$filtro === "aprovado" ? "btn-dark" : "btn-outline-secondary"?>">Aprovados</a>
+        <span class="badge text-bg-light border ms-1">Recibos e IA na próxima fatia</span>
+    </div>
+    <div class="table-responsive" style="max-height: 28rem;">
+        <table class="table table-sm table-hover caixa-table mb-0">
+            <thead class="table-light sticky-top">
+                <tr>
+                    <th>Data</th>
+                    <th>Histórico</th>
+                    <th class="text-end">Valor</th>
+                    <th>Confiança</th>
+                    <th>Status</th>
+                    <th>Conta DFC</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($movimentos as $m) : ?>
+                <?php
+                    $conf = (int) ($m->confianca_conta ?? 0);
+                    $confClass = $conf >= 85 ? "conf-alta" : ($conf >= 50 ? "conf-media" : ($conf > 0 ? "conf-baixa" : "conf-none"));
+                    $confLabel = $conf > 0 ? $conf . "%" : "—";
+                    $valor = (float) $m->valor;
+                    $valorClass = $valor >= 0 ? "mov-valor-pos" : "mov-valor-neg";
+                ?>
+                <tr>
+                    <td class="text-nowrap"><?=date("d/m/Y", strtotime((string) $m->data_posted))?></td>
+                    <td>
+                        <div class="small"><?=htmlspecialchars((string) $m->memo, ENT_QUOTES, "UTF-8")?></div>
+                        <div class="text-muted" style="font-size:.7rem;"><?=htmlspecialchars((string) $m->fitid, ENT_QUOTES, "UTF-8")?></div>
+                    </td>
+                    <td class="text-end text-nowrap <?=$valorClass?>">
+                        R$ <?=number_format($valor, 2, ",", ".")?>
+                    </td>
+                    <td><span class="conf-pill <?=$confClass?>"><?=$confLabel?></span></td>
+                    <td>
+                        <?php
+                            $st = (string) $m->status;
+                            $badge = match ($st) {
+                                "aprovado" => "success",
+                                "sugerido", "editado" => "warning",
+                                "ignorado" => "secondary",
+                                default => "light",
+                            };
+                        ?>
+                        <span class="badge text-bg-<?=$badge?> border"><?=htmlspecialchars($st, ENT_QUOTES, "UTF-8")?></span>
+                    </td>
+                    <td class="small text-muted">
+                        <?php if ($m->id_dre_conta) : ?>
+                            #<?=(int)$m->id_dre_conta?>
+                        <?php else : ?>
+                            <span class="text-muted">Aguardando classificação</span>
+                        <?php endif ?>
+                    </td>
+                </tr>
+            <?php endforeach ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+<?php elseif ($sessao) : ?>
+<div class="alert alert-warning">Nenhum movimento neste filtro.</div>
+<?php endif ?>
+
+<?php if ($permissao["editar"]) : ?>
+<div class="modal fade" id="modal-editar-projeto-abrir" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form action="<?=$router->route("admin.projeto.update")?>" method="POST">
+                <input type="hidden" name="csrf" value="<?=$csrf?>">
+                <input type="hidden" name="id" value="<?=$projeto->id?>">
+                <div class="modal-header">
+                    <h5 class="modal-title">Editar Projeto</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Empresa <span class="text-danger">*</span></label>
+                        <select name="id_empresa" class="form-control selectpicker" data-live-search="true" data-live-search-normalize="true" required>
+                            <option value="">Selecione...</option>
+                            <?php foreach ($empresas as $emp) : ?>
+                                <?php
+                                    $razao = trim((string) ($emp->razao ?: $emp->nome));
+                                    $sel = ((int)$emp->id === (int)$projeto->id_empresa) ? "selected" : "";
+                                ?>
+                                <option value="<?=(int)$emp->id?>" <?=$sel?>><?=htmlspecialchars($razao, ENT_QUOTES, "UTF-8")?></option>
+                            <?php endforeach ?>
+                        </select>
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label">Nome do projeto</label>
+                        <input type="text" name="nome" class="form-control" value="<?=htmlspecialchars((string)($projeto->nome ?? ""), ENT_QUOTES, "UTF-8")?>">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endif ?>
+
+<?php $this->start("scripts") ?>
+<script src="<?=asset("dist/bootstrap-select/bootstrap-select.min.js")?>"></script>
+<script>if (window.jQuery) { $('.selectpicker').selectpicker(); }</script>
+<?php $this->end() ?>

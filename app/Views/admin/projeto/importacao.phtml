@@ -38,7 +38,7 @@
     }
     .projeto-nav-link:hover { color: #343a40; }
     .projeto-nav-link.active { color: #0d6efd; border-bottom-color: #0d6efd; }
-
+    .projeto-nav { flex-wrap: wrap; }
 
     .import-card {
         border: 2px solid #e9ecef;
@@ -54,17 +54,7 @@
 </style>
 <?php $this->end() ?>
 
-<!-- Navegação principal do projeto -->
-<nav class="projeto-nav">
-    <a href="<?=$router->route("admin.projeto.abrir", ["id" => $projeto->id])?>"
-       class="projeto-nav-link <?=$aba === "visao-geral" ? "active" : ""?>">
-        <i class="uil uil-chart-pie me-1"></i>Visão Geral
-    </a>
-    <a href="<?=$router->route("admin.projeto.importacao", ["id" => $projeto->id])?>"
-       class="projeto-nav-link <?=$aba === "importacao" ? "active" : ""?>">
-        <i class="uil uil-import me-1"></i>Importação de Dados
-    </a>
-</nav>
+<?php $this->insert("admin/projeto/_nav", ["projeto" => $projeto, "aba" => $aba]) ?>
 
 <!-- Seletor de tipo de demonstrativo -->
 <div class="d-flex align-items-center gap-2 mb-3">
