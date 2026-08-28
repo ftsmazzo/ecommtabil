@@ -210,7 +210,7 @@ class ProjetoCaixaController extends ControllerAdmin
             "breadcrumb" => [
                 "Projetos"    => ["url" => $this->router->route("admin.projeto.index"), "current" => false],
                 $label        => ["url" => $this->router->route("admin.projeto.abrir", ["id" => $projeto->id]), "current" => false],
-                "Montar DFC"  => ["url" => false, "current" => true],
+                "DFC"  => ["url" => false, "current" => true],
             ],
             "page" => [
                 "title" => $label,
@@ -221,7 +221,7 @@ class ProjetoCaixaController extends ControllerAdmin
 
         echo $this->view->render("admin/projeto/caixa", [
             "projeto"         => $projeto,
-            "aba"             => "montar-dfc",
+            "aba"             => "dfc",
             "sessoes"         => $sessoes,
             "sessao"          => $sessao,
             "movimentos"      => $movimentos,
@@ -260,14 +260,14 @@ class ProjetoCaixaController extends ControllerAdmin
         $file = $_FILES["arquivo"] ?? null;
         if (!$file || ($file["error"] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
             $this->message->warning("Envie um arquivo OFX ou PDF do extrato bancário.");
-            $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+            $this->router->redirect("admin.projeto.dfc", ["id" => $projeto->id]);
             return;
         }
 
         $ext = strtolower(pathinfo((string) $file["name"], PATHINFO_EXTENSION));
         if (!in_array($ext, ["ofx", "pdf"], true)) {
             $this->message->warning("Formato inválido. Envie extrato em OFX ou PDF.");
-            $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+            $this->router->redirect("admin.projeto.dfc", ["id" => $projeto->id]);
             return;
         }
 
@@ -281,7 +281,7 @@ class ProjetoCaixaController extends ControllerAdmin
 
         if (!move_uploaded_file((string) $file["tmp_name"], $destino)) {
             $this->message->error("Falha ao salvar o extrato. Tente novamente.");
-            $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+            $this->router->redirect("admin.projeto.dfc", ["id" => $projeto->id]);
             return;
         }
 
@@ -306,14 +306,14 @@ class ProjetoCaixaController extends ControllerAdmin
             $msg .= " (memória {$cls["por_memoria"]}, regras {$cls["por_regra"]}, IA {$cls["por_ia"]}).";
             $this->message->success($msg);
 
-            $this->router->redirect("admin.projeto.caixa", [
+            $this->router->redirect("admin.projeto.dfc", [
                 "id"     => $projeto->id,
                 "sessao" => $out["sessao"]->id,
             ]);
         } catch (\Throwable $e) {
             @unlink($destino);
             $this->message->error("Não foi possível ler o extrato: " . $e->getMessage());
-            $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+            $this->router->redirect("admin.projeto.dfc", ["id" => $projeto->id]);
         }
     }
 
@@ -329,7 +329,7 @@ class ProjetoCaixaController extends ControllerAdmin
         $sessao = CaixaSessao::findAtiva((int) ($data->sessao_id ?? 0), (int) $projeto->id);
         if (!$sessao) {
             $this->message->warning("Sessão inválida.");
-            $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+            $this->router->redirect("admin.projeto.dfc", ["id" => $projeto->id]);
             return;
         }
 
@@ -349,7 +349,7 @@ class ProjetoCaixaController extends ControllerAdmin
             $this->message->success($msg);
         }
 
-        $this->router->redirect("admin.projeto.caixa", [
+        $this->router->redirect("admin.projeto.dfc", [
             "id"     => $projeto->id,
             "sessao" => $sessao->id,
         ]);
@@ -367,14 +367,14 @@ class ProjetoCaixaController extends ControllerAdmin
         $sessao = CaixaSessao::findAtiva((int) ($data->sessao_id ?? 0), (int) $projeto->id);
         if (!$sessao) {
             $this->message->warning("Abra uma sessão de extrato antes de enviar recibos.");
-            $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+            $this->router->redirect("admin.projeto.dfc", ["id" => $projeto->id]);
             return;
         }
 
         $files = $this->normalizarFiles($_FILES["recibos"] ?? null);
         if ($files === []) {
             $this->message->warning("Selecione um ou mais PDFs/imagens de recibo.");
-            $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id, "sessao" => $sessao->id]);
+            $this->router->redirect("admin.projeto.dfc", ["id" => $projeto->id, "sessao" => $sessao->id]);
             return;
         }
 
@@ -386,7 +386,7 @@ class ProjetoCaixaController extends ControllerAdmin
             $this->message->success($msg);
         }
 
-        $this->router->redirect("admin.projeto.caixa", [
+        $this->router->redirect("admin.projeto.dfc", [
             "id"     => $projeto->id,
             "sessao" => $sessao->id,
             "recibo" => "sem",
@@ -459,7 +459,7 @@ class ProjetoCaixaController extends ControllerAdmin
         $sessao = CaixaSessao::findAtiva((int) ($data->sessao_id ?? 0), (int) $projeto->id);
         if (!$sessao) {
             $this->message->warning("Sessão inválida.");
-            $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+            $this->router->redirect("admin.projeto.dfc", ["id" => $projeto->id]);
             return;
         }
 
@@ -480,7 +480,7 @@ class ProjetoCaixaController extends ControllerAdmin
         $sessao = CaixaSessao::findAtiva((int) ($data->sessao_id ?? 0), (int) $projeto->id);
         if (!$sessao) {
             $this->message->warning("Sessão inválida.");
-            $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+            $this->router->redirect("admin.projeto.dfc", ["id" => $projeto->id]);
             return;
         }
 
@@ -502,13 +502,13 @@ class ProjetoCaixaController extends ControllerAdmin
         $idSessao = (int) ($data->sessao_id ?? 0);
         if ($idSessao < 1) {
             $this->message->warning("Sessão inválida.");
-            $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+            $this->router->redirect("admin.projeto.dfc", ["id" => $projeto->id]);
             return;
         }
 
         (new CaixaSessaoService())->arquivar($idSessao, (int) $projeto->id);
         $this->message->success("Sessão arquivada.");
-        $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+        $this->router->redirect("admin.projeto.dfc", ["id" => $projeto->id]);
     }
 
     public function zerarMontagens(Request $request): void
@@ -526,7 +526,7 @@ class ProjetoCaixaController extends ControllerAdmin
         } else {
             $this->message->success("Apaguei {$n} montagem(ns). Pode começar do zero.");
         }
-        $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+        $this->router->redirect("admin.projeto.dfc", ["id" => $projeto->id]);
     }
 
     public function gerarDfc(Request $request): void
@@ -541,7 +541,7 @@ class ProjetoCaixaController extends ControllerAdmin
         $sessao = CaixaSessao::findAtiva((int) ($data->sessao_id ?? 0), (int) $projeto->id);
         if (!$sessao) {
             $this->message->warning("Sessão inválida.");
-            $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+            $this->router->redirect("admin.projeto.dfc", ["id" => $projeto->id]);
             return;
         }
 
@@ -600,7 +600,7 @@ class ProjetoCaixaController extends ControllerAdmin
         $idVinculo = (int) ($data->vinculo_id ?? 0);
         if (!$sessao || $idVinculo < 1) {
             $this->message->warning("Vínculo inválido.");
-            $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+            $this->router->redirect("admin.projeto.dfc", ["id" => $projeto->id]);
             return;
         }
 
@@ -623,7 +623,7 @@ class ProjetoCaixaController extends ControllerAdmin
         $sessao = CaixaSessao::findAtiva((int) ($data->sessao_id ?? 0), (int) $projeto->id);
         if (!$sessao) {
             $this->message->warning("Sessão inválida.");
-            $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+            $this->router->redirect("admin.projeto.dfc", ["id" => $projeto->id]);
             return;
         }
 
@@ -645,7 +645,7 @@ class ProjetoCaixaController extends ControllerAdmin
         $idVinculo = (int) ($data->vinculo_id ?? 0);
         if (!$sessao || $idVinculo < 1) {
             $this->message->warning("Vínculo inválido.");
-            $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+            $this->router->redirect("admin.projeto.dfc", ["id" => $projeto->id]);
             return;
         }
 
@@ -668,7 +668,7 @@ class ProjetoCaixaController extends ControllerAdmin
         $sessao = CaixaSessao::findAtiva((int) ($data->sessao_id ?? 0), (int) $projeto->id);
         if (!$sessao) {
             $this->message->warning("Sessão inválida.");
-            $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+            $this->router->redirect("admin.projeto.dfc", ["id" => $projeto->id]);
             return;
         }
 
@@ -689,7 +689,7 @@ class ProjetoCaixaController extends ControllerAdmin
         $idMov = (int) ($data->movimento_id ?? 0);
         if (!$sessao || $idMov < 1) {
             $this->message->warning("Movimento inválido.");
-            $this->router->redirect("admin.projeto.caixa", ["id" => $projeto->id]);
+            $this->router->redirect("admin.projeto.dfc", ["id" => $projeto->id]);
             return;
         }
 
@@ -731,7 +731,7 @@ class ProjetoCaixaController extends ControllerAdmin
         if (!isset($q["status"]) && $idSessao > 0) {
             $q["status"] = "pendentes";
         }
-        $this->router->redirect("admin.projeto.caixa", $q);
+        $this->router->redirect("admin.projeto.dfc", $q);
     }
 
     /**

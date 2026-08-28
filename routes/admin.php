@@ -139,6 +139,8 @@ $router->namespace("\App\Controllers\Admin")->group(null);
     $router->post("/projetos/update", "ProjetoController:update", "admin.projeto.update");
     $router->get("/projetos/delete/{id}", "ProjetoController:delete", "admin.projeto.delete");
     $router->get("/projetos/{id}", "ProjetoController:open", "admin.projeto.abrir");
+    $router->get("/projetos/{id}/dre", "ProjetoController:dre", "admin.projeto.dre");
+    $router->get("/projetos/{id}/bp", "ProjetoController:bp", "admin.projeto.bp");
     $router->get("/projetos/{id}/importacao", "ProjetoController:importacao", "admin.projeto.importacao");
     $router->post("/projetos/{id}/importacao/limpar", "ProjetoController:limparImportacao", "admin.projeto.importacao.limpar");
     $router->post("/projetos/{id}/importacao/upload", "ProjetoController:uploadPlanilha", "admin.projeto.importacao.upload");
@@ -149,7 +151,8 @@ $router->namespace("\App\Controllers\Admin")->group(null);
     $router->post("/projetos/{id}/importacao/mapear/simular", "ProjetoController:simularDados", "admin.projeto.importacao.mapear.simular");
     $router->post("/projetos/{id}/importacao/processar", "ProjetoController:processarDados", "admin.projeto.importacao.processar");
 
-    // MONTAR DFC (extrato OFX + recibos → conferência → DFC)
+    // DFC — planilha + extrato bancário (OFX/PDF) + comprovantes
+    $router->get("/projetos/{id}/dfc", "ProjetoCaixaController:index", "admin.projeto.dfc");
     $router->get("/projetos/{id}/caixa", "ProjetoCaixaController:index", "admin.projeto.caixa");
     $router->post("/projetos/{id}/caixa/extrato", "ProjetoCaixaController:uploadExtrato", "admin.projeto.caixa.upload");
     $router->post("/projetos/{id}/caixa/arquivar", "ProjetoCaixaController:arquivarSessao", "admin.projeto.caixa.arquivar");

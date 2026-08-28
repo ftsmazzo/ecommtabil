@@ -257,6 +257,27 @@ class ProjetoController extends ControllerAdmin
     public function importacao(Request $request): void
     {
         $this->authorize("projeto_gerenciar");
+        $data = new Data($request->all());
+        $tipo = TipoDemonstrativo::existeSigla($data->tipo ?? "") ? $data->tipo : "DRE";
+        $this->router->redirect(TipoDemonstrativo::routeName($tipo), ["id" => (int) ($data->id ?? 0)]);
+    }
+
+    public function dre(Request $request): void
+    {
+        $this->renderDemonstrativo($request, "DRE");
+    }
+
+    public function bp(Request $request): void
+    {
+        $this->renderDemonstrativo($request, "BP");
+    }
+
+    /**
+     * Tela dedicada de importação por demonstrativo (DRE ou BP).
+     */
+    private function renderDemonstrativo(Request $request, string $tipoFixo): void
+    {
+        $this->authorize("projeto_gerenciar");
 
         $data    = new Data($request->all());
         $projeto = Projeto::leftJoin("empresa as e", "p.id_empresa", "=", "e.id")
@@ -274,36 +295,42 @@ class ProjetoController extends ControllerAdmin
         $this->rememberVisitedProject($projeto);
 
         $projetoLabel = trim($projeto->nome ?? "") ?: $projeto->empresa_print;
+        $tituloTela   = TipoDemonstrativo::tituloTela($tipoFixo);
+        $aba          = TipoDemonstrativo::abaNav($tipoFixo);
+        $view         = strtolower($tipoFixo) === "bp" ? "bp" : "dre";
 
         $this->view->addData([
             "breadcrumb" => [
                 "Projetos"    => ["url" => $this->router->route("admin.projeto.index"), "current" => false],
                 $projetoLabel => ["url" => $this->router->route("admin.projeto.abrir", ["id" => $projeto->id]), "current" => false],
-                "Importação"  => ["url" => false, "current" => true],
+                $tipoFixo     => ["url" => false, "current" => true],
             ],
             "page" => [
-                "title" => $projeto->nome,
-                "desc"  => $projeto->empresa_print,
+                "title" => $projetoLabel,
+                "desc"  => $tituloTela,
             ],
-            "title" => $projeto->nome,
+            "title" => $projetoLabel,
         ]);
 
-        $tipoDemo = TipoDemonstrativo::existeSigla($data->tipo ?? "")
-            ? $data->tipo
-            : TipoDemonstrativo::padrao()?->sigla;
-
-        echo $this->view->render("admin/projeto/importacao", [
-            "projeto"    => $projeto,
-            "aba"        => "importacao",
-            "tipo"       => $tipoDemo,
-            "tipos"      => TipoDemonstrativo::options(),
-            "csrf"       => $this->csrf->generate(),
-            "empresas"   => Empresa::orderBy("razao")->get(),
-            "permissao"  => [
+        echo $this->view->render("admin/projeto/{$view}", [
+            "projeto"   => $projeto,
+            "aba"       => $aba,
+            "tipo"      => $tipoFixo,
+            "csrf"      => $this->csrf->generate(),
+            "empresas"  => Empresa::orderBy("razao")->get(),
+            "permissao" => [
                 "editar"  => $this->auth->allow("projeto_editar"),
                 "excluir" => $this->auth->allow("projeto_excluir"),
             ],
         ]);
+    }
+
+    private function redirectDemonstrativo(int $idProjeto, ?string $tipo = null): void
+    {
+        $sigla = $tipo && TipoDemonstrativo::existeSigla($tipo)
+            ? $tipo
+            : (TipoDemonstrativo::padrao()?->sigla ?? "DRE");
+        $this->router->redirect(TipoDemonstrativo::routeName($sigla), ["id" => $idProjeto]);
     }
 
     public function limparImportacao(Request $request): void
@@ -321,7 +348,8 @@ class ProjetoController extends ControllerAdmin
         (new Migrator(Connection::get(), PATH_ROOT . "/storage/migrations"))->limparTabelasImportacao();
         $this->session->unset("planilha_upload");
         $this->message->success("Lançamentos, mapeamentos e perfis de origem de teste foram apagados. Envie o arquivo de novo.");
-        $this->router->redirect("admin.projeto.importacao", ["id" => $projeto->id]);
+        $tipoVolta = trim((string) ($data->tipo ?? ""));
+        $this->redirectDemonstrativo((int) $projeto->id, $tipoVolta !== "" ? $tipoVolta : null);
     }
 
     public function uploadPlanilha(Request $request): void
@@ -341,14 +369,14 @@ class ProjetoController extends ControllerAdmin
 
         if (!$file || $file["error"] !== UPLOAD_ERR_OK) {
             $this->message->warning("Nenhum arquivo enviado ou erro no upload");
-            $this->router->redirect("admin.projeto.importacao", ["id" => $projeto->id]);
+            $this->redirectDemonstrativo((int) $projeto->id, (string) ($data->tipo_demonstrativo ?? ""));
             return;
         }
 
         $ext = strtolower(pathinfo($file["name"], PATHINFO_EXTENSION));
         if (!in_array($ext, ["xlsx", "xls", "csv"])) {
             $this->message->warning("Formato inválido. Envie um arquivo XLSX, XLS ou CSV");
-            $this->router->redirect("admin.projeto.importacao", ["id" => $projeto->id]);
+            $this->redirectDemonstrativo((int) $projeto->id, (string) ($data->tipo_demonstrativo ?? ""));
             return;
         }
 
@@ -360,7 +388,7 @@ class ProjetoController extends ControllerAdmin
 
         if (!move_uploaded_file($file["tmp_name"], $destino)) {
             $this->message->error("Falha ao salvar o arquivo. Tente novamente");
-            $this->router->redirect("admin.projeto.importacao", ["id" => $projeto->id]);
+            $this->redirectDemonstrativo((int) $projeto->id, (string) ($data->tipo_demonstrativo ?? ""));
             return;
         }
 
@@ -404,7 +432,7 @@ class ProjetoController extends ControllerAdmin
 
         if (!$upload || ($upload->projeto ?? null) != $projeto->id) {
             $this->message->warning("Nenhum arquivo em processamento. Faça o upload novamente");
-            $this->router->redirect("admin.projeto.importacao", ["id" => $projeto->id]);
+            $this->redirectDemonstrativo((int) $projeto->id, (string) ($upload->tipo ?? ""));
             return;
         }
 
@@ -413,7 +441,7 @@ class ProjetoController extends ControllerAdmin
         if (!file_exists($caminho)) {
             $this->message->warning("Arquivo não encontrado. Faça o upload novamente");
             $this->session->unset("planilha_upload");
-            $this->router->redirect("admin.projeto.importacao", ["id" => $projeto->id]);
+            $this->redirectDemonstrativo((int) $projeto->id, (string) ($upload->tipo ?? ""));
             return;
         }
 
@@ -507,7 +535,7 @@ class ProjetoController extends ControllerAdmin
             }
         } catch (\Throwable $e) {
             $this->message->error("Não foi possível ler o arquivo: " . $e->getMessage());
-            $this->router->redirect("admin.projeto.importacao", ["id" => $projeto->id]);
+            $this->redirectDemonstrativo((int) $projeto->id, (string) ($upload->tipo ?? ""));
             return;
         }
 
@@ -515,11 +543,12 @@ class ProjetoController extends ControllerAdmin
         $this->rememberVisitedProject($projeto);
         $projetoLabel = trim($projeto->nome ?? "") ?: $projeto->empresa_print;
 
+        $tipoUpload = (string) ($upload->tipo ?? "DRE");
         $this->view->addData([
             "breadcrumb" => [
                 "Projetos"              => ["url" => $this->router->route("admin.projeto.index"), "current" => false],
                 $projetoLabel           => ["url" => $this->router->route("admin.projeto.abrir", ["id" => $projeto->id]), "current" => false],
-                "Importação"            => ["url" => $this->router->route("admin.projeto.importacao", ["id" => $projeto->id]), "current" => false],
+                $tipoUpload             => ["url" => $this->router->route(TipoDemonstrativo::routeName($tipoUpload), ["id" => $projeto->id]), "current" => false],
                 "De-para"               => ["url" => false, "current" => true],
             ],
             "page" => [
@@ -614,7 +643,7 @@ class ProjetoController extends ControllerAdmin
 
         if (!$upload || ($upload->projeto ?? null) != $projeto->id) {
             $this->message->warning("Sessão expirada. Faça o upload novamente");
-            $this->router->redirect("admin.projeto.importacao", ["id" => $projeto->id]);
+            $this->redirectDemonstrativo((int) $projeto->id, (string) ($upload->tipo ?? ""));
             return;
         }
 
@@ -622,7 +651,7 @@ class ProjetoController extends ControllerAdmin
         if (!file_exists($caminho)) {
             $this->message->warning("Arquivo não encontrado. Faça o upload novamente");
             $this->session->unset("planilha_upload");
-            $this->router->redirect("admin.projeto.importacao", ["id" => $projeto->id]);
+            $this->redirectDemonstrativo((int) $projeto->id, (string) ($upload->tipo ?? ""));
             return;
         }
 
@@ -742,7 +771,7 @@ class ProjetoController extends ControllerAdmin
 
         if (!$upload || ($upload->projeto ?? null) != $projeto->id) {
             $this->message->warning("Sessão expirada. Faça o upload novamente");
-            $this->router->redirect("admin.projeto.importacao", ["id" => $projeto->id]);
+            $this->redirectDemonstrativo((int) $projeto->id, (string) ($upload->tipo ?? ""));
             return;
         }
 
@@ -753,7 +782,7 @@ class ProjetoController extends ControllerAdmin
         if (!file_exists($caminho)) {
             $this->message->warning("Arquivo não encontrado. Faça o upload novamente");
             $this->session->unset("planilha_upload");
-            $this->router->redirect("admin.projeto.importacao", ["id" => $projeto->id]);
+            $this->redirectDemonstrativo((int) $projeto->id, (string) ($upload->tipo ?? ""));
             return;
         }
 

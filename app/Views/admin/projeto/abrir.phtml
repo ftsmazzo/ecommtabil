@@ -67,6 +67,11 @@
                         <div class="fw-semibold mt-1">
                             R$ <?=number_format((float) $r->valor_total, 2, ",", ".")?>
                         </div>
+                        <div class="text-muted small mt-2">
+                            <a href="<?=$router->route(\App\Models\TipoDemonstrativo::routeName($slug), ["id" => $projeto->id])?>" class="small">
+                                Importar mais →
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -81,13 +86,16 @@
                     <span style="font-size:3rem;line-height:1;color:#0d6efd;"><i class="uil uil-chart-growth"></i></span>
                 </div>
                 <h5 class="mb-1">Dados ainda não importados</h5>
-                <p class="text-muted mb-4 small">Importe planilhas ou monte o DFC a partir do extrato bancário.</p>
+                <p class="text-muted mb-4 small">Escolha o demonstrativo e envie planilha ou extrato (no DFC).</p>
                 <div class="d-flex flex-wrap gap-2 justify-content-center">
-                    <a href="<?=$router->route("admin.projeto.importacao", ["id" => $projeto->id])?>" class="btn btn-primary btn-sm">
-                        <i class="uil uil-import me-1"></i>Importar Dados
+                    <a href="<?=$router->route("admin.projeto.dre", ["id" => $projeto->id])?>" class="btn btn-primary btn-sm">
+                        <i class="uil uil-chart-line me-1"></i>DRE
                     </a>
-                    <a href="<?=$router->route("admin.projeto.caixa", ["id" => $projeto->id])?>" class="btn btn-outline-primary btn-sm">
-                        <i class="uil uil-money-withdraw me-1"></i>Montar DFC
+                    <a href="<?=$router->route("admin.projeto.dfc", ["id" => $projeto->id])?>" class="btn btn-outline-primary btn-sm">
+                        <i class="uil uil-money-withdraw me-1"></i>DFC
+                    </a>
+                    <a href="<?=$router->route("admin.projeto.bp", ["id" => $projeto->id])?>" class="btn btn-outline-primary btn-sm">
+                        <i class="uil uil-balance-scale me-1"></i>Balanço
                     </a>
                 </div>
             </div>

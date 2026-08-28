@@ -7,12 +7,16 @@
        class="projeto-nav-link <?=$aba === "visao-geral" ? "active" : ""?>">
         <i class="uil uil-chart-pie me-1"></i>Visão Geral
     </a>
-    <a href="<?=$router->route("admin.projeto.importacao", ["id" => $projeto->id])?>"
-       class="projeto-nav-link <?=$aba === "importacao" ? "active" : ""?>">
-        <i class="uil uil-import me-1"></i>Importação de Dados
+    <a href="<?=$router->route("admin.projeto.dre", ["id" => $projeto->id])?>"
+       class="projeto-nav-link <?=$aba === "dre" ? "active" : ""?>">
+        <i class="uil uil-chart-line me-1"></i>DRE
     </a>
-    <a href="<?=$router->route("admin.projeto.caixa", ["id" => $projeto->id])?>"
-       class="projeto-nav-link <?=$aba === "montar-dfc" ? "active" : ""?>">
-        <i class="uil uil-money-withdraw me-1"></i>Montar DFC
+    <a href="<?=$router->route("admin.projeto.dfc", ["id" => $projeto->id])?>"
+       class="projeto-nav-link <?=$aba === "dfc" ? "active" : ""?>">
+        <i class="uil uil-money-withdraw me-1"></i>DFC
+    </a>
+    <a href="<?=$router->route("admin.projeto.bp", ["id" => $projeto->id])?>"
+       class="projeto-nav-link <?=$aba === "bp" ? "active" : ""?>">
+        <i class="uil uil-balance-scale me-1"></i>Balanço Patrimonial
     </a>
 </nav>

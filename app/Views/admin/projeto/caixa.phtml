@@ -6,10 +6,19 @@
             <i class="uil uil-edit-alt"></i> Editar
         </button>
     <?php endif ?>
+    <form action="<?=$router->route("admin.projeto.importacao.limpar", ["id" => $projeto->id])?>" method="POST" class="d-inline"
+          onsubmit="return confirm('Apagar lançamentos importados por planilha deste projeto?');">
+        <input type="hidden" name="csrf" value="<?=$csrf?>">
+        <input type="hidden" name="tipo" value="DFC">
+        <button type="submit" class="btn btn-outline-danger btn-sm">
+            <i class="uil uil-trash-alt"></i> Limpar planilha DFC
+        </button>
+    </form>
 <?php $this->end() ?>
 
 <?php $this->start("styles") ?>
 <link rel="stylesheet" href="<?=asset("dist/bootstrap-select/bootstrap-select.min.css")?>">
+<link rel="stylesheet" type="text/css" href="<?=asset("dist/dizuploader/dizuploader.min.css")?>">
 <style>
     .projeto-nav { display:flex; gap:.25rem; border-bottom:2px solid #e9ecef; margin-bottom:1.5rem; flex-wrap:wrap; }
     .projeto-nav-link { padding:.5rem 1rem; border-radius:.375rem .375rem 0 0; font-size:.875rem; font-weight:500; color:#6c757d; text-decoration:none; border-bottom:2px solid transparent; margin-bottom:-2px; }
@@ -29,10 +38,27 @@
     .caixa-bar { display:flex; flex-wrap:wrap; gap:.75rem 1.25rem; align-items:center; padding:.75rem 1rem; background:#f8f9fa; border-radius:.5rem; margin-bottom:1rem; font-size:.875rem; }
     .caixa-bar strong { font-size:1rem; }
     .toolbar { display:flex; flex-wrap:wrap; gap:.35rem; align-items:center; margin-bottom:.75rem; }
+    .import-card { border:2px solid #e9ecef; border-radius:.75rem; height:100%; }
+    .import-card-icon { font-size:2rem; line-height:1; color:#0d6efd; }
+    .dfc-section-title { font-size:1rem; font-weight:600; margin-bottom:1rem; }
 </style>
 <?php $this->end() ?>
 
 <?php $this->insert("admin/projeto/_nav", ["projeto" => $projeto, "aba" => $aba]) ?>
+
+<div class="mb-4">
+    <div class="dfc-section-title"><i class="uil uil-table me-1"></i> Importar planilha DFC</div>
+    <?php $this->insert("admin/projeto/_importacao_demonstrativo", [
+        "projeto" => $projeto,
+        "tipo"    => "DFC",
+        "csrf"    => $csrf,
+        "compact" => true,
+    ]) ?>
+</div>
+
+<hr class="my-4">
+
+<div class="dfc-section-title mb-3"><i class="uil uil-university me-1"></i> Montar a partir de extrato bancário</div>
 
 <?php
 $filtro = $filtro ?? "pendentes";
@@ -109,13 +135,13 @@ $totalRecBar = (int)(($cf["recibos"] ?? 0));
     <div class="card-header bg-white py-2">
         <div class="toolbar mb-0">
             <strong class="me-2">Comprovantes</strong>
-            <a href="<?=$router->route("admin.projeto.caixa", $baseQ + ["recibo"=>"pendentes", "status"=>$filtro])?>"
+            <a href="<?=$router->route("admin.projeto.dfc", $baseQ + ["recibo"=>"pendentes", "status"=>$filtro])?>"
                class="btn btn-sm <?=$filtroRecibo==="pendentes" || $filtroRecibo==="sem" || $filtroRecibo==="sugerido" ? "btn-warning" : "btn-outline-warning"?>">
                 Fila (pendentes)
             </a>
-            <a href="<?=$router->route("admin.projeto.caixa", $baseQ + ["recibo"=>"validado", "status"=>$filtro])?>"
+            <a href="<?=$router->route("admin.projeto.dfc", $baseQ + ["recibo"=>"validado", "status"=>$filtro])?>"
                class="btn btn-sm <?=$filtroRecibo==="validado" ? "btn-success" : "btn-outline-success"?>">Feitos</a>
-            <a href="<?=$router->route("admin.projeto.caixa", $baseQ + ["recibo"=>"todos", "status"=>$filtro])?>"
+            <a href="<?=$router->route("admin.projeto.dfc", $baseQ + ["recibo"=>"todos", "status"=>$filtro])?>"
                class="btn btn-sm <?=$filtroRecibo==="todos" ? "btn-dark" : "btn-outline-secondary"?>">Todos</a>
             <form action="<?=$router->route("admin.projeto.caixa.confirmar_sugeridos", ["id"=>$projeto->id])?>" method="POST" class="ms-auto">
                 <input type="hidden" name="csrf" value="<?=$csrf?>">
@@ -218,11 +244,11 @@ $totalRecBar = (int)(($cf["recibos"] ?? 0));
     <div class="card-header bg-white py-2">
         <div class="toolbar mb-0">
             <strong class="me-2">Lançamentos</strong>
-            <a href="<?=$router->route("admin.projeto.caixa", $baseQ + ["status"=>"pendentes", "recibo"=>$filtroRecibo])?>"
+            <a href="<?=$router->route("admin.projeto.dfc", $baseQ + ["status"=>"pendentes", "recibo"=>$filtroRecibo])?>"
                class="btn btn-sm <?=$filtro==="pendentes" ? "btn-warning" : "btn-outline-warning"?>">Pendentes</a>
-            <a href="<?=$router->route("admin.projeto.caixa", $baseQ + ["status"=>"aprovado", "recibo"=>$filtroRecibo])?>"
+            <a href="<?=$router->route("admin.projeto.dfc", $baseQ + ["status"=>"aprovado", "recibo"=>$filtroRecibo])?>"
                class="btn btn-sm <?=$filtro==="aprovado" ? "btn-success" : "btn-outline-success"?>">Aprovados</a>
-            <a href="<?=$router->route("admin.projeto.caixa", $baseQ + ["status"=>"todos", "recibo"=>$filtroRecibo])?>"
+            <a href="<?=$router->route("admin.projeto.dfc", $baseQ + ["status"=>"todos", "recibo"=>$filtroRecibo])?>"
                class="btn btn-sm <?=$filtro==="todos" ? "btn-dark" : "btn-outline-secondary"?>">Todos</a>
             <form action="<?=$router->route("admin.projeto.caixa.aprovar_sugeridos", ["id"=>$projeto->id])?>" method="POST" class="ms-auto"
                   onsubmit="return confirm('Aprovar em bloco todos com conta já definida?');">
@@ -534,9 +560,21 @@ $totalRecBar = (int)(($cf["recibos"] ?? 0));
 
 <?php $this->start("scripts") ?>
 <script src="<?=asset("dist/bootstrap-select/bootstrap-select.min.js")?>"></script>
+<script src="<?=asset("dist/dizuploader/dizuploader.min.js")?>"></script>
 <script>
 (function () {
     if (window.jQuery) { $('.selectpicker').selectpicker(); }
+    if (window.jQuery && $.fn.dizuploader) {
+        $(".input-import-template, .input-import-livre").each(function () {
+            $(this).dizuploader({ caption: "Arraste ou clique.", extensions: ["xlsx", "xls", "csv"] });
+        });
+        $(".form-import-template, .form-import-livre").on("submit", function () {
+            var $btn = $(this).find("button[type=submit]");
+            $btn.prop("disabled", true);
+            $btn.find(".btn-text").addClass("d-none");
+            $btn.find(".btn-loading").removeClass("d-none");
+        });
+    }
     var modal = document.getElementById('modal-editar-mov');
     if (!modal) return;
     modal.addEventListener('show.bs.modal', function (ev) {

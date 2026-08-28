@@ -95,7 +95,7 @@ $renderLinhaModelo = function (array $campo) use ($renderSelect, $campos): void 
 ?>
 
 <?php $this->start("page-actions") ?>
-    <a href="<?=$router->route("admin.projeto.importacao", ["id" => $projeto->id, "tipo" => $upload->tipo])?>"
+    <a href="<?=$router->route(\App\Models\TipoDemonstrativo::routeName((string) $upload->tipo), ["id" => $projeto->id])?>"
        class="btn btn-outline-secondary btn-sm">
         <i class="uil uil-arrow-left me-1"></i>Cancelar
     </a>
@@ -324,7 +324,7 @@ $renderLinhaModelo = function (array $campo) use ($renderSelect, $campos): void 
             <?php endif ?>
         </span>
         <div class="d-flex gap-2 flex-wrap">
-            <a href="<?=$router->route("admin.projeto.importacao", ["id" => $projeto->id, "tipo" => $upload->tipo])?>"
+            <a href="<?=$router->route(\App\Models\TipoDemonstrativo::routeName((string) $upload->tipo), ["id" => $projeto->id])?>"
                class="btn btn-outline-secondary">Cancelar</a>
             <button type="submit" form="form-mapeamento" class="btn btn-primary" id="btn-salvar-mapear">
                 <i class="uil uil-check me-1"></i>Salvar mapeamento

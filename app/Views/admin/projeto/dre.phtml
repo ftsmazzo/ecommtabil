@@ -1,0 +1,58 @@
+<?php $this->layout("app/template/base"); ?>
+
+<?php $this->start("page-actions") ?>
+    <?php if ($permissao["editar"]) : ?>
+        <button type="button" class="btn btn-white btn-sm" data-bs-toggle="modal" data-bs-target="#modal-editar-projeto-abrir">
+            <i class="uil uil-edit-alt"></i> Editar
+        </button>
+    <?php endif ?>
+    <form action="<?=$router->route("admin.projeto.importacao.limpar", ["id" => $projeto->id])?>" method="POST" class="d-inline"
+          onsubmit="return confirm('Apagar lançamentos e de-paras de teste deste projeto?');">
+        <input type="hidden" name="csrf" value="<?=$csrf?>">
+        <input type="hidden" name="tipo" value="DRE">
+        <button type="submit" class="btn btn-outline-danger btn-sm">
+            <i class="uil uil-trash-alt"></i> Limpar importações
+        </button>
+    </form>
+<?php $this->end() ?>
+
+<?php $this->start("styles") ?>
+<?php $this->insert("admin/projeto/_importacao_assets") ?>
+<?php $this->end() ?>
+
+<?php $this->insert("admin/projeto/_nav", ["projeto" => $projeto, "aba" => $aba]) ?>
+
+<?php $this->insert("admin/projeto/_importacao_demonstrativo", [
+    "projeto" => $projeto,
+    "tipo"    => "DRE",
+    "csrf"    => $csrf,
+    "compact" => false,
+]) ?>
+
+<?php $this->insert("admin/projeto/_modal_editar_projeto", [
+    "projeto" => $projeto,
+    "empresas" => $empresas,
+    "csrf" => $csrf,
+    "permissao" => $permissao,
+]) ?>
+
+<?php $this->start("endScripts") ?>
+<script src="<?=asset("dist/bootstrap-select/bootstrap-select.min.js")?>"></script>
+<script src="<?=asset("dist/bootstrap-select/defaults-pt_BR.min.js")?>"></script>
+<script src="<?=asset("dist/dizuploader/dizuploader.min.js")?>"></script>
+<script>
+$(function () {
+    if ($.fn.dizuploader) {
+        $(".input-import-template, .input-import-livre").each(function () {
+            $(this).dizuploader({ caption: "Arraste ou clique para selecionar.", extensions: ["xlsx", "xls", "csv"] });
+        });
+    }
+    $(".form-import-template, .form-import-livre").on("submit", function () {
+        var $btn = $(this).find("button[type=submit]");
+        $btn.prop("disabled", true);
+        $btn.find(".btn-text").addClass("d-none");
+        $btn.find(".btn-loading").removeClass("d-none");
+    });
+});
+</script>
+<?php $this->end() ?>

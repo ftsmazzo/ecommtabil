@@ -58,4 +58,33 @@ class TipoDemonstrativo extends Model
     {
         return static::firstWhere("sigla", $sigla);
     }
+
+    /** Rota da tela dedicada ao demonstrativo (DRE / DFC / BP). */
+    public static function routeName(string $sigla): string
+    {
+        return match (strtoupper(trim($sigla))) {
+            "DFC"   => "admin.projeto.dfc",
+            "BP"    => "admin.projeto.bp",
+            default => "admin.projeto.dre",
+        };
+    }
+
+    /** Identificador da aba no menu do projeto. */
+    public static function abaNav(string $sigla): string
+    {
+        return match (strtoupper(trim($sigla))) {
+            "DFC"   => "dfc",
+            "BP"    => "bp",
+            default => "dre",
+        };
+    }
+
+    public static function tituloTela(string $sigla): string
+    {
+        return match (strtoupper(trim($sigla))) {
+            "DFC"   => "Fluxo de Caixa (DFC)",
+            "BP"    => "Balanço Patrimonial",
+            default => "Demonstrativo de Resultado (DRE)",
+        };
+    }
 }
