@@ -44,6 +44,128 @@ class OpenRouter
     }
 
     /**
+     * Chat completion (texto) — de-para, estruturação, etc.
+     *
+     * @return array{ok:bool,text?:string,error?:string,model?:string}
+     */
+    public function completar(string $systemPrompt, string $userPrompt, ?string $model = null): array
+    {
+        $payload = [
+            "model" => $model ?? $this->model,
+            "messages" => [
+                ["role" => "system", "content" => $systemPrompt],
+                ["role" => "user", "content" => $userPrompt],
+            ],
+        ];
+
+        $resp = $this->postChat($payload);
+        if (!$resp["ok"]) {
+            return $resp;
+        }
+
+        $text = $this->textoDaResposta($resp["raw"] ?? []);
+        if ($text === "") {
+            return ["ok" => false, "error" => "OpenRouter retornou resposta vazia."];
+        }
+
+        return ["ok" => true, "text" => $text, "model" => $model ?? $this->model];
+    }
+
+    /**
+     * OCR de PDF de demonstrativo contábil (DRE / BP / DFC em PDF).
+     *
+     * @return array{ok:bool,text?:string,error?:string}
+     */
+    public function extrairDemonstrativoPdf(string $caminhoArquivo, string $tipoDemo, string $nomeArquivo = ""): array
+    {
+        if (!is_readable($caminhoArquivo)) {
+            return ["ok" => false, "error" => "PDF ilegível."];
+        }
+
+        $bin = @file_get_contents($caminhoArquivo);
+        if ($bin === false || $bin === "") {
+            return ["ok" => false, "error" => "Não foi possível ler o PDF."];
+        }
+
+        $tipo = strtoupper(trim($tipoDemo));
+        $filename = $nomeArquivo !== "" ? $nomeArquivo : basename($caminhoArquivo);
+        $dataUrl = "data:application/pdf;base64," . base64_encode($bin);
+
+        $payload = [
+            "model" => $this->model,
+            "messages" => [[
+                "role" => "user",
+                "content" => [
+                    [
+                        "type" => "text",
+                        "text" => "Extraia TODO o conteúdo tabular deste PDF de {$tipo} (demonstrativo contábil). "
+                            . "Preserve: nomes de contas/linhas, cabeçalhos de colunas, períodos (meses/anos), valores monetários. "
+                            . "Mantenha a ordem das linhas. Não resuma. Responda SOMENTE com o texto/tabela extraído.",
+                    ],
+                    [
+                        "type" => "file",
+                        "file" => [
+                            "filename" => $filename,
+                            "file_data" => $dataUrl,
+                        ],
+                    ],
+                ],
+            ]],
+            "plugins" => [[
+                "id" => "file-parser",
+                "pdf" => ["engine" => $this->pdfEngine],
+            ]],
+        ];
+
+        $resp = $this->postChat($payload);
+        if (!$resp["ok"]) {
+            return $resp;
+        }
+
+        $text = $this->textoDaResposta($resp["raw"] ?? []);
+        if ($text === "") {
+            return ["ok" => false, "error" => "OCR não retornou texto do PDF."];
+        }
+
+        return ["ok" => true, "text" => $text, "engine" => $this->pdfEngine];
+    }
+
+    /**
+     * Converte texto OCR de demonstrativo em CSV (uma linha por registro ou colunar).
+     *
+     * @return array{ok:bool,csv?:string,error?:string}
+     */
+    public function textoDemonstrativoParaCsv(string $texto, string $tipoDemo): array
+    {
+        $tipo = strtoupper(trim($tipoDemo));
+        $system = <<<PROMPT
+Você estrutura demonstrativos contábeis em CSV.
+Responda SOMENTE com CSV válido (UTF-8), separador vírgula.
+Regras:
+- Linha 1 = cabeçalhos das colunas
+- Valores monetários: use ponto decimal (1234.56), sem R$
+- Datas/períodos: dd/mm/aaaa ou yyyy-mm quando aplicável
+- Não use markdown, não explique
+PROMPT;
+
+        $user = "Demonstrativo: {$tipo}\n\nTexto extraído do PDF:\n\n" . mb_substr($texto, 0, 120000);
+
+        $resp = $this->completar($system, $user);
+        if (!$resp["ok"]) {
+            return $resp;
+        }
+
+        $csv = trim((string) ($resp["text"] ?? ""));
+        $csv = preg_replace('/^```(?:csv)?\s*/i', "", $csv) ?? $csv;
+        $csv = preg_replace('/\s*```$/', "", $csv) ?? $csv;
+        if ($csv === "" || !str_contains($csv, "\n")) {
+            return ["ok" => false, "error" => "Não foi possível estruturar o PDF em planilha."];
+        }
+
+        return ["ok" => true, "csv" => $csv];
+    }
+
+    /**
      * Extrai o texto completo de um PDF local (base64) via Mistral OCR / file-parser.
      *
      * @return array{ok:bool,text?:string,error?:string,engine?:string,model?:string}

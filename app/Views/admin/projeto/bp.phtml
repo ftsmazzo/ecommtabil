@@ -44,7 +44,7 @@
 $(function () {
     if ($.fn.dizuploader) {
         $(".input-import-template, .input-import-livre").each(function () {
-            $(this).dizuploader({ caption: "Arraste ou clique para selecionar.", extensions: ["xlsx", "xls", "csv"] });
+            $(this).dizuploader({ caption: "Arraste ou clique para selecionar.", extensions: ["xlsx", "xls", "csv", "pdf"] });
         });
     }
     $(".form-import-template, .form-import-livre").on("submit", function () {

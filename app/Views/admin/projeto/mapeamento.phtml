@@ -113,6 +113,12 @@ $renderLinhaModelo = function (array $campo) use ($renderSelect, $campos): void 
 </style>
 <?php $this->end() ?>
 
+<?php if (!empty($upload->fonte_pdf)) : ?>
+<div class="alert alert-info py-2 small mb-3">
+    Arquivo convertido de <strong>PDF</strong> (Mistral OCR). Confira cabeçalhos e amostras — use <strong>IA</strong> no de-para se algo não bater.
+</div>
+<?php endif ?>
+
 <div class="row g-3 mb-3">
     <div class="col-12 col-md-6">
         <div class="card h-100">

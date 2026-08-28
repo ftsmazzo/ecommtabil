@@ -9,6 +9,7 @@ use App\Core\Redirect;
 use App\Core\Request;
 use App\Core\DB;
 use App\Lib\ChatGPT;
+use App\Lib\OpenRouter;
 use App\Models\DreConta;
 use App\Models\TipoDemonstrativo;
 use App\Models\Empresa;
@@ -20,6 +21,7 @@ use App\Services\Database\Migrator;
 use App\Services\Importacao\DeParaMapper;
 use App\Services\Importacao\OrigemClassificador;
 use App\Services\Importacao\OrigemPerfilService;
+use App\Services\Importacao\PdfPlanilhaConverter;
 use App\Services\Importacao\PlanilhaImportacaoService;
 use App\Services\MenuService;
 
@@ -333,6 +335,36 @@ class ProjetoController extends ControllerAdmin
         $this->router->redirect(TipoDemonstrativo::routeName($sigla), ["id" => $idProjeto]);
     }
 
+    /**
+     * IA para revisar de-para: OpenRouter (se configurado) ou OpenAI.
+     *
+     * @return array{ok:bool,text?:string,error?:string}
+     */
+    private function iaDePara(string $systemPrompt, string $prompt): array
+    {
+        if (OpenRouter::disponivel()) {
+            try {
+                $or = new OpenRouter();
+                $r  = $or->completar($systemPrompt, $prompt);
+                if (!empty($r["ok"])) {
+                    return $r;
+                }
+            } catch (\Throwable) {
+                // tenta OpenAI
+            }
+        }
+
+        try {
+            $ai = new ChatGPT();
+            return $ai->send($systemPrompt, $prompt, "", null, [
+                "retries" => 0,
+                "model"   => "gpt-4.1-mini",
+            ]);
+        } catch (\Throwable $e) {
+            return ["ok" => false, "error" => $e->getMessage()];
+        }
+    }
+
     public function limparImportacao(Request $request): void
     {
         $this->authorize("projeto_gerenciar");
@@ -374,27 +406,54 @@ class ProjetoController extends ControllerAdmin
         }
 
         $ext = strtolower(pathinfo($file["name"], PATHINFO_EXTENSION));
-        if (!in_array($ext, ["xlsx", "xls", "csv"])) {
-            $this->message->warning("Formato inválido. Envie um arquivo XLSX, XLS ou CSV");
+        if (!in_array($ext, ["xlsx", "xls", "csv", "pdf"], true)) {
+            $this->message->warning("Formato inválido. Envie XLSX, XLS, CSV ou PDF");
             $this->redirectDemonstrativo((int) $projeto->id, (string) ($data->tipo_demonstrativo ?? ""));
             return;
         }
 
         $dir = PATH_ROOT . "/storage/tmp/planilhas/";
-        if (!is_dir($dir)) mkdir($dir, 0755, true);
-
-        $nome    = "proj_{$projeto->id}_" . time() . "_" . uniqid() . "." . $ext;
-        $destino = $dir . $nome;
-
-        if (!move_uploaded_file($file["tmp_name"], $destino)) {
-            $this->message->error("Falha ao salvar o arquivo. Tente novamente");
-            $this->redirectDemonstrativo((int) $projeto->id, (string) ($data->tipo_demonstrativo ?? ""));
-            return;
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
         }
 
         $tipoDemo = TipoDemonstrativo::existeSigla($data->tipo_demonstrativo ?? "")
             ? $data->tipo_demonstrativo
             : TipoDemonstrativo::padrao()?->sigla;
+
+        $fontePdf = false;
+        if ($ext === "pdf") {
+            $tmpPdf = $dir . "upload_" . time() . "_" . uniqid() . ".pdf";
+            if (!move_uploaded_file($file["tmp_name"], $tmpPdf)) {
+                $this->message->error("Falha ao salvar o PDF.");
+                $this->redirectDemonstrativo((int) $projeto->id, (string) $tipoDemo);
+                return;
+            }
+            $conv = (new PdfPlanilhaConverter())->paraArquivoCsv(
+                $tmpPdf,
+                $dir,
+                (string) $tipoDemo,
+                (string) $file["name"]
+            );
+            @unlink($tmpPdf);
+            if (empty($conv["ok"])) {
+                $this->message->error((string) ($conv["error"] ?? "Não foi possível ler o PDF."));
+                $this->redirectDemonstrativo((int) $projeto->id, (string) $tipoDemo);
+                return;
+            }
+            $nome    = (string) $conv["nome"];
+            $destino = (string) $conv["destino"];
+            $ext     = "csv";
+            $fontePdf = true;
+        } else {
+            $nome    = "proj_{$projeto->id}_" . time() . "_" . uniqid() . "." . $ext;
+            $destino = $dir . $nome;
+            if (!move_uploaded_file($file["tmp_name"], $destino)) {
+                $this->message->error("Falha ao salvar o arquivo. Tente novamente");
+                $this->redirectDemonstrativo((int) $projeto->id, (string) ($data->tipo_demonstrativo ?? ""));
+                return;
+            }
+        }
 
         $origem = in_array((string) ($data->origem ?? ""), ["template", "livre"], true)
             ? (string) $data->origem
@@ -407,7 +466,12 @@ class ProjetoController extends ControllerAdmin
             "projeto"       => $projeto->id,
             "origem"        => $origem,
             "conta_padrao"  => null,
+            "fonte_pdf"     => $fontePdf ? 1 : 0,
         ]);
+
+        if ($fontePdf) {
+            $this->message->info("PDF convertido via Mistral OCR. Confira o de-para antes de processar.");
+        }
 
         $this->router->redirect("admin.projeto.importacao.mapear", ["id" => $projeto->id]);
     }
@@ -1008,11 +1072,7 @@ PROMPT;
         $maxIndice = count($headers) - 1;
 
         try {
-            $ai     = new ChatGPT();
-            $result = $ai->send($systemPrompt, $prompt, "", null, [
-                "retries" => 0,
-                "model"   => "gpt-4.1-mini",
-            ]);
+            $result = $this->iaDePara($systemPrompt, $prompt);
 
             if (!$result["ok"]) {
                 echo json_encode([

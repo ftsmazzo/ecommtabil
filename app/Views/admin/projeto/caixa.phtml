@@ -566,7 +566,7 @@ $totalRecBar = (int)(($cf["recibos"] ?? 0));
     if (window.jQuery) { $('.selectpicker').selectpicker(); }
     if (window.jQuery && $.fn.dizuploader) {
         $(".input-import-template, .input-import-livre").each(function () {
-            $(this).dizuploader({ caption: "Arraste ou clique.", extensions: ["xlsx", "xls", "csv"] });
+            $(this).dizuploader({ caption: "Arraste ou clique.", extensions: ["xlsx", "xls", "csv", "pdf"] });
         });
         $(".form-import-template, .form-import-livre").on("submit", function () {
             var $btn = $(this).find("button[type=submit]");
