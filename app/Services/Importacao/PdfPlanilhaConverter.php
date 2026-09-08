@@ -78,10 +78,43 @@ class PdfPlanilhaConverter
         $nomeSalvo = $nomeCsv . "_" . time() . ".csv";
         $destino = rtrim($dirDestino, "/\\") . DIRECTORY_SEPARATOR . $nomeSalvo;
 
+        $csv = $this->sanitizarCsvImportacao($csv);
+
         if (@file_put_contents($destino, $csv) === false) {
             return ["ok" => false, "error" => "Não foi possível gravar CSV convertido."];
         }
 
         return ["ok" => true, "destino" => $destino, "nome" => $nomeSalvo, "fonte" => $fonte];
+    }
+
+    /**
+     * Evita que valores começando com "=" sejam interpretados como fórmula Excel.
+     */
+    private function sanitizarCsvImportacao(string $csv): string
+    {
+        $csv = preg_replace('/^\xEF\xBB\xBF/', "", $csv) ?? $csv;
+        $linhas = preg_split("/\R/u", $csv) ?: [];
+        $out = [];
+        foreach ($linhas as $linha) {
+            if ($linha === "") {
+                $out[] = $linha;
+                continue;
+            }
+            $cols = str_getcsv($linha);
+            foreach ($cols as $i => $col) {
+                $trim = ltrim((string) $col);
+                if ($trim !== "" && str_starts_with($trim, "=")) {
+                    $cols[$i] = "'" . $col;
+                }
+            }
+            $out[] = implode(",", array_map(static function (string $v): string {
+                if (str_contains($v, ",") || str_contains($v, '"') || str_contains($v, "\n")) {
+                    return '"' . str_replace('"', '""', $v) . '"';
+                }
+                return $v;
+            }, $cols));
+        }
+
+        return implode("\n", $out);
     }
 }

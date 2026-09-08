@@ -616,6 +616,7 @@ class ProjetoController extends ControllerAdmin
                 $anoBase = (int) date("Y");
             }
         } catch (\Throwable $e) {
+            error_log("[importacao.mapear] " . $e->getMessage() . " @ " . $e->getFile() . ":" . $e->getLine());
             $this->message->error("Não foi possível ler o arquivo: " . $e->getMessage());
             $this->redirectDemonstrativo((int) $projeto->id, (string) ($upload->tipo ?? ""));
             return;

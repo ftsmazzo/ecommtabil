@@ -38,7 +38,13 @@ class PlanilhaImportacaoService
      */
     public function abrir(string $caminho): array
     {
-        $reader      = IOFactory::createReaderForFile($caminho);
+        $reader = IOFactory::createReaderForFile($caminho);
+        $ext = strtolower((string) pathinfo($caminho, PATHINFO_EXTENSION));
+        if ($ext === "csv" && $reader instanceof \PhpOffice\PhpSpreadsheet\Reader\Csv) {
+            $reader->setDelimiter(",");
+            $reader->setEnclosure('"');
+            $reader->setInputEncoding("UTF-8");
+        }
         $spreadsheet = $reader->load($caminho);
 
         return [
@@ -818,6 +824,10 @@ class PlanilhaImportacaoService
         $cell  = $sheet->getCell($letra . $row);
         $raw   = $cell->getValue();
 
+        if ($raw instanceof \PhpOffice\PhpSpreadsheet\RichText\RichText) {
+            return trim($raw->getPlainText());
+        }
+
         if (is_float($raw) || is_int($raw)) {
             $fmt = $cell->getStyle()->getNumberFormat()->getFormatCode();
             if (ExcelDate::isDateTimeFormatCode($fmt)) {
@@ -827,7 +837,27 @@ class PlanilhaImportacaoService
             return (string) $raw;
         }
 
-        $val = $cell->getCalculatedValue();
+        if (is_bool($raw)) {
+            return $raw ? "1" : "0";
+        }
+
+        // Totais ALTERDATA / OCR vêm como "=Caixa e Equivalentes…".
+        // O PhpSpreadsheet trata "=" como fórmula Excel; getCalculatedValue()
+        // quebra com array_intersect_key() (espaço = interseção de ranges).
+        if (is_string($raw) && str_starts_with(ltrim($raw), "=")) {
+            return trim(html_entity_decode($raw, ENT_QUOTES | ENT_HTML5, "UTF-8"));
+        }
+
+        if ($raw === null || $raw === "") {
+            return "";
+        }
+
+        try {
+            $val = $cell->getCalculatedValue();
+        } catch (\Throwable) {
+            $val = $raw;
+        }
+
         return trim(html_entity_decode((string) $val, ENT_QUOTES | ENT_HTML5, "UTF-8"));
     }
 
