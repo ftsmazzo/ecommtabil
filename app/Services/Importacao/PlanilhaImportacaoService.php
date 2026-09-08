@@ -272,7 +272,14 @@ class PlanilhaImportacaoService
         $primeiraEConta = $primeira !== ""
             && !$this->parecePeriodo($primeira)
             && !$this->pareceCabecalhoPeriodo($primeira)
-            && !$this->pareceValor($primeira);
+            && !$this->pareceValor($primeira)
+            && ($temConta || in_array($primeira, ["conta", "descricao", "linha", "rubrica", "classificacao"], true)
+                || str_starts_with($primeira, "conta") || str_starts_with($primeira, "descricao"));
+
+        // Conta × datas (BP ALTERDATA: Conta, 31/12/2024, 31/12/2023)
+        if ($periodos >= 1 && ($temConta || $primeiraEConta) && !$temValor) {
+            return self::LAYOUT_MATRIZ;
+        }
 
         if ($periodos >= 2 && !$temValor && ($temConta || $primeiraEConta)) {
             return self::LAYOUT_MATRIZ;
@@ -1529,6 +1536,7 @@ class PlanilhaImportacaoService
         return in_array($n, [
             "conta", "contaplano", "nomedaconta", "descricaodaconta",
             "classificacao", "rubrica", "linha", "linhars", "linhadaconta",
+            "descricao",
         ], true) || (str_starts_with($n, "conta") && !str_contains($n, "contato"));
     }
 
@@ -1556,6 +1564,22 @@ class PlanilhaImportacaoService
 
     private function pareceCabecalhoPeriodo(string $n): bool
     {
+        if ($n === "") {
+            return false;
+        }
+        // 31/12/2024 → 31122024; 12/2024 → 122024; Exercício Atual → exercicioatual
+        if (preg_match('/^\d{1,2}\d{1,2}20\d{2}$/', $n)) {
+            return true;
+        }
+        if (preg_match('/^\d{1,2}20\d{2}$/', $n)) {
+            return true;
+        }
+        if (preg_match('/^20\d{2}\d{1,2}\d{0,2}$/', $n)) {
+            return true;
+        }
+        if (str_contains($n, "exercicioatual") || str_contains($n, "exercicioanterior")) {
+            return true;
+        }
         if (preg_match("/^(ano\d+|20\d{2}|jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)/", $n)) {
             return true;
         }

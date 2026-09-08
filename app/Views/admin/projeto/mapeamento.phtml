@@ -205,23 +205,48 @@ $renderLinhaModelo = function (array $campo) use ($renderSelect, $campos): void 
     <?php endforeach ?>
 
     <div class="<?=$podeProcessar ? "alert alert-success" : "alert alert-warning"?> py-2 mb-3">
+        <?php
+            $tipoAtual = strtoupper((string) ($upload->tipo ?? ""));
+            $ehBp = $tipoAtual === "BP";
+        ?>
         <?php if ($layoutAtual === "matriz") : ?>
             <?php if ($podeProcessar) : ?>
-                Matriz pronta: coluna da <strong>conta</strong> e colunas de <strong>mês</strong> marcadas.
-                Linhas de fórmula (totais, EBITDA…) são ignoradas — só entram dados de entrada.
+                <?php if ($ehBp) : ?>
+                    Balanço em matriz pronto: coluna da <strong>conta</strong> e colunas de <strong>período</strong> (exercício atual/anterior).
+                    Totais e subtotais são ignorados — só entram contas analíticas.
+                <?php else : ?>
+                    Matriz pronta: coluna da <strong>conta</strong> e colunas de <strong>mês</strong> marcadas.
+                    Linhas de fórmula (totais, EBITDA…) são ignoradas — só entram dados de entrada.
+                <?php endif ?>
             <?php else : ?>
-                Planilha matriz (conta × mês): escolha a coluna <strong>Linha / Conta</strong>
-                e marque os meses (Jan–Dez) abaixo.
+                <?php if ($ehBp) : ?>
+                    Balanço patrimonial (conta × período): escolha a coluna <strong>Conta</strong>
+                    e marque as colunas de exercício (atual e anterior) abaixo.
+                <?php else : ?>
+                    Planilha matriz (conta × mês): escolha a coluna <strong>Linha / Conta</strong>
+                    e marque os meses (Jan–Dez) abaixo.
+                <?php endif ?>
             <?php endif ?>
         <?php elseif ($podeProcessar) : ?>
             Dá para processar: tem <strong>data</strong> e pelo menos uma <strong>conta de valor</strong>.
-            Contas de despesa fixa (aluguel, folha, depreciação) vazias são normais em planilha de vendas.
+            <?php if ($ehBp) : ?>
+                Contas sem coluna correspondente podem ficar vazias.
+            <?php else : ?>
+                Contas de despesa fixa (aluguel, folha, depreciação) vazias são normais em planilha de vendas.
+            <?php endif ?>
         <?php else : ?>
-            Para processar esta planilha de vendas precisa de
-            <strong>Data da venda</strong><?=$temData ? " (ok)" : " (faltando)"?>
-            e pelo menos uma coluna de valor ligada a uma conta
-            (Receita, CMV, tarifa…)<?=$temContaN ? " (ok)" : " (faltando)"?>.
-            O resto do plano pode ficar sem coluna.
+            <?php if ($ehBp) : ?>
+                Para processar este balanço precisa de
+                <strong>Data / competência</strong><?=$temData ? " (ok)" : " (faltando)"?>
+                e pelo menos uma coluna de valor ligada a uma conta do plano<?=$temContaN ? " (ok)" : " (faltando)"?>.
+                Prefira o layout matriz (Conta × períodos) para PDF ALTERDATA.
+            <?php else : ?>
+                Para processar esta planilha de vendas precisa de
+                <strong>Data da venda</strong><?=$temData ? " (ok)" : " (faltando)"?>
+                e pelo menos uma coluna de valor ligada a uma conta
+                (Receita, CMV, tarifa…)<?=$temContaN ? " (ok)" : " (faltando)"?>.
+                O resto do plano pode ficar sem coluna.
+            <?php endif ?>
         <?php endif ?>
     </div>
 
@@ -272,7 +297,13 @@ $renderLinhaModelo = function (array $campo) use ($renderSelect, $campos): void 
     <details class="card mb-3">
         <summary class="card-header fw-semibold" style="cursor:pointer">
             Outras contas do plano — vazio é válido
-            <span class="text-muted fw-normal small ms-1">(aluguel, folha, depreciação… não vêm na planilha de vendas)</span>
+            <span class="text-muted fw-normal small ms-1">
+                <?php if (strtoupper((string) ($upload->tipo ?? "")) === "BP") : ?>
+                    (só preencha se a planilha tiver coluna para a conta)
+                <?php else : ?>
+                    (aluguel, folha, depreciação… não vêm na planilha de vendas)
+                <?php endif ?>
+            </span>
         </summary>
         <div class="table-responsive">
             <table class="table table-sm mb-0 align-middle">

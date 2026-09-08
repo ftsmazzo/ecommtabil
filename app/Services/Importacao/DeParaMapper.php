@@ -1045,7 +1045,9 @@ TXT;
         return in_array($n, [
             "conta", "contaplano", "nomedaconta", "descricaodaconta",
             "classificacao", "rubrica", "linha", "linhars", "linhadaconta",
-        ], true) || (str_starts_with($n, "conta") && !str_contains($n, "contato") && !str_contains($n, "contas"));
+        ], true)
+            || $n === "descricao"
+            || (str_starts_with($n, "conta") && !str_contains($n, "contato") && !str_contains($n, "contas"));
     }
 
     public function pareceValor(string $n): bool
@@ -1080,6 +1082,21 @@ TXT;
 
     public function pareceCabecalhoPeriodo(string $n): bool
     {
+        if ($n === "") {
+            return false;
+        }
+        if (preg_match('/^\d{1,2}\d{1,2}20\d{2}$/', $n)) {
+            return true;
+        }
+        if (preg_match('/^\d{1,2}20\d{2}$/', $n)) {
+            return true;
+        }
+        if (preg_match('/^20\d{2}\d{1,2}\d{0,2}$/', $n)) {
+            return true;
+        }
+        if (str_contains($n, "exercicioatual") || str_contains($n, "exercicioanterior")) {
+            return true;
+        }
         return (bool) preg_match("/^(ano\d+|20\d{2}|jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)/", $n);
     }
 }

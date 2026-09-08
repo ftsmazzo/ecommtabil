@@ -18,6 +18,7 @@ use App\Models\ProjetoLancamento;
 use App\Models\ProjetoMapeamentoColuna;
 use App\Models\UsuarioProjetoRecente;
 use App\Services\Database\Migrator;
+use App\Services\Importacao\AlterdataBpPdfParser;
 use App\Services\Importacao\DeParaMapper;
 use App\Services\Importacao\OrigemClassificador;
 use App\Services\Importacao\OrigemPerfilService;
@@ -473,19 +474,21 @@ class ProjetoController extends ControllerAdmin
             : "livre";
 
         $this->session->set("planilha_upload", [
-            "arquivo"       => $nome,
-            "original"      => $file["name"],
-            "tipo"          => $tipoDemo,
-            "projeto"       => $projeto->id,
-            "origem"        => $origem,
-            "conta_padrao"  => null,
-            "fonte_pdf"     => $fontePdf ? 1 : 0,
+            "arquivo"          => $nome,
+            "original"         => $file["name"],
+            "tipo"             => $tipoDemo,
+            "projeto"          => $projeto->id,
+            "origem"           => $origem,
+            "conta_padrao"     => null,
+            "fonte_pdf"        => $fontePdf ? 1 : 0,
+            "fonte_conversao"  => $fontePdf ? (string) ($conv["fonte"] ?? "ocr") : "",
+            "layout_forcado"   => $fontePdf ? (string) ($conv["layout"] ?? "") : "",
         ]);
 
         if ($fontePdf) {
             $fonte = (string) (($conv["fonte"] ?? "ocr"));
             if ($fonte === "alterdata") {
-                $this->message->info("PDF ALTERDATA convertido localmente. Confira o de-para antes de processar.");
+                $this->message->info("PDF ALTERDATA convertido em matriz (Conta × períodos). Confira o de-para e processe.");
             } else {
                 $this->message->info("PDF convertido via Mistral OCR. Confira o de-para antes de processar.");
             }
@@ -553,19 +556,62 @@ class ProjetoController extends ControllerAdmin
 
             $mapaSalvo = ProjetoMapeamentoColuna::porProjeto((int) $projeto->id, (string) $upload->tipo, $abaAtiva);
             $extensao  = strtolower((string) pathinfo((string) ($upload->arquivo ?? ""), PATHINFO_EXTENSION));
+            $layoutForcado = trim((string) ($upload->layout_forcado ?? ""));
+            $fonteConv = strtolower(trim((string) ($upload->fonte_conversao ?? "")));
+            $tipoUploadUpper = strtoupper((string) ($upload->tipo ?? ""));
+
+            // BP ALTERDATA / PDF BP → sempre matriz Conta × períodos
+            if ($layoutForcado === "" && ($fonteConv === "alterdata" || ($tipoUploadUpper === "BP" && !empty($upload->fonte_pdf)))) {
+                $layoutForcado = PlanilhaImportacaoService::LAYOUT_MATRIZ;
+            }
+            if ($layoutForcado === "" && $tipoUploadUpper === "BP") {
+                $nomeOrig = (string) ($upload->original ?? "");
+                if ((new AlterdataBpPdfParser())->nomeSugereAlterdata($nomeOrig)) {
+                    $layoutForcado = PlanilhaImportacaoService::LAYOUT_MATRIZ;
+                }
+            }
+
             $porOrigem = $svc->sugerirPorOrigem(
                 $headers,
                 $contasLista,
                 $previews,
                 (string) $upload->tipo,
-                "",
+                $layoutForcado,
                 $extensao
             );
-            $layoutDetectado = $porOrigem["layout"] ?: $svc->detectarLayout($headers);
+            $layoutDetectado = $layoutForcado !== ""
+                ? $layoutForcado
+                : ($porOrigem["layout"] ?: $svc->detectarLayout($headers));
+
+            // BP com cabeçalhos Conta + datas → força matriz mesmo se o motor errou
+            if ($tipoUploadUpper === "BP" && $layoutDetectado !== PlanilhaImportacaoService::LAYOUT_MATRIZ) {
+                $detectado = $svc->detectarLayout($headers);
+                if ($detectado === PlanilhaImportacaoService::LAYOUT_MATRIZ) {
+                    $layoutDetectado = PlanilhaImportacaoService::LAYOUT_MATRIZ;
+                    $porOrigem = $svc->sugerirPorOrigem(
+                        $headers,
+                        $contasLista,
+                        $previews,
+                        (string) $upload->tipo,
+                        PlanilhaImportacaoService::LAYOUT_MATRIZ,
+                        $extensao
+                    );
+                }
+            }
+
             $familiaOrigem = $porOrigem["familia"];
             $dePara       = $svc->camposDePara((string) $upload->tipo, $contasGrupos, (string) $layoutDetectado);
             $mapperTipos = new DeParaMapper();
 
+            // Mapa salvo de outro layout (vendas) não serve para matriz BP
+            if ($mapaSalvo && $layoutDetectado === PlanilhaImportacaoService::LAYOUT_MATRIZ) {
+                $expTmp = $svc->expandirMapa($mapaSalvo);
+                $temMatrizSalva = ($expTmp["periodos_matriz"] ?? []) !== []
+                    || isset($expTmp["campos"][PlanilhaImportacaoService::DEST_CONTA]);
+                if (!$temMatrizSalva) {
+                    $mapaSalvo = [];
+                }
+            }
             if ($mapaSalvo) {
                 $expandido = $svc->expandirMapa($mapaSalvo);
                 if (!$mapperTipos->mapaCompativel($expandido["campos"] ?? [], $headers, $previews)) {
@@ -1267,12 +1313,15 @@ PROMPT;
     private function atualizarUploadSessao(object $upload, array $extra): void
     {
         $this->session->set("planilha_upload", array_merge([
-            "arquivo"      => $upload->arquivo ?? "",
-            "original"     => $upload->original ?? "",
-            "tipo"         => $upload->tipo ?? "",
-            "projeto"      => $upload->projeto ?? 0,
-            "origem"       => $upload->origem ?? "livre",
-            "conta_padrao" => $upload->conta_padrao ?? null,
+            "arquivo"         => $upload->arquivo ?? "",
+            "original"        => $upload->original ?? "",
+            "tipo"            => $upload->tipo ?? "",
+            "projeto"         => $upload->projeto ?? 0,
+            "origem"          => $upload->origem ?? "livre",
+            "conta_padrao"    => $upload->conta_padrao ?? null,
+            "fonte_pdf"       => $upload->fonte_pdf ?? 0,
+            "fonte_conversao" => $upload->fonte_conversao ?? "",
+            "layout_forcado"  => $upload->layout_forcado ?? "",
         ], $extra));
     }
 

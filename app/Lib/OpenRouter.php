@@ -138,7 +138,24 @@ class OpenRouter
     public function textoDemonstrativoParaCsv(string $texto, string $tipoDemo): array
     {
         $tipo = strtoupper(trim($tipoDemo));
-        $system = <<<PROMPT
+
+        if ($tipo === "BP") {
+            $system = <<<PROMPT
+Você estrutura Balanço Patrimonial em CSV MATRIZ.
+Responda SOMENTE com CSV válido (UTF-8), separador vírgula.
+Formato obrigatório:
+- Linha 1: Conta,<data exercício atual dd/mm/aaaa>,<data exercício anterior dd/mm/aaaa>
+- Uma linha por conta ANALÍTICA (com código contábil), nunca totais/subtotais
+- Valores com ponto decimal (4245.68), sem R$, sem D/C
+- Passivo e obrigações: valor negativo
+- Prejuízos acumulados: valor negativo
+- Não use markdown, não explique
+PROMPT;
+            $user = "Converta este BP em matriz Conta × períodos.\n"
+                . "Se for ALTERDATA (valores com D/C e códigos 1.1.01...), ignore linhas de total (=...).\n\n"
+                . mb_substr($texto, 0, 120000);
+        } else {
+            $system = <<<PROMPT
 Você estrutura demonstrativos contábeis em CSV.
 Responda SOMENTE com CSV válido (UTF-8), separador vírgula.
 Regras:
@@ -147,8 +164,8 @@ Regras:
 - Datas/períodos: dd/mm/aaaa ou yyyy-mm quando aplicável
 - Não use markdown, não explique
 PROMPT;
-
-        $user = "Demonstrativo: {$tipo}\n\nTexto extraído do PDF:\n\n" . mb_substr($texto, 0, 120000);
+            $user = "Demonstrativo: {$tipo}\n\nTexto extraído do PDF:\n\n" . mb_substr($texto, 0, 120000);
+        }
 
         $resp = $this->completar($system, $user);
         if (!$resp["ok"]) {
