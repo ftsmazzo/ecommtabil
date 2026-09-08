@@ -1,0 +1,39 @@
+Folha: 1
+BIANCA THAINE NOGUEIRA & CIA LTDA(00147)
+Balanço Patrimonial Encerrado em 31/12/2024
+Descrição 	Classificação 	Exercício Atual	Exercício Anterior
+ATIVO (7)
+ATIVO CIRCULANTE (14)
+Disponibilidades (21)
+Caixa e Equivalentes de Caixa (28)
+4.245,68D	0,00D	Caixa (35) 	1.1.01.001.00001
+******4.245,68D	**********0,00D	=Caixa e Equivalentes de Caixa
+******4.245,68D	**********0,00D	=Disponibilidades
+******4.245,68D	**********0,00D	=T o t a l - ATIVO CIRCULANTE
+******4.245,68D	**********0,00D	=T o t a l - ATIVO
+
+Folha: 2
+BIANCA THAINE NOGUEIRA & CIA LTDA(00147)
+Balanço Patrimonial Encerrado em 31/12/2024
+Descrição 	Classificação 	Exercício Atual	Exercício Anterior
+PASSIVO E PATRIMÔNIO LÍQUIDO (630)
+PASSIVO CIRCULANTE (637)
+Obrigações Fiscais (735)
+Impostos a Recolher (742)
+84.600,00C	0,00C	COFINS a Recolher (749) 	2.1.03.001.00001
+505.827,01C	0,00C	ICMS a Recolher (756) 	2.1.03.001.00002
+511.380,35C	41.388,12C	Tributos Federais (3304) 	2.1.03.001.00015
+**1.101.807,36C	*****41.388,12C	=Impostos a Recolher
+**1.101.807,36C	*****41.388,12C	=Obrigações Fiscais
+**1.101.807,36C	*****41.388,12C	=T o t a l - PASSIVO CIRCULANTE
+PATRIMÔNIO LÍQUIDO (1099)
+Lucros/Prejuízos Acumulados (1176)
+Lucros Acumulados (1183)
+33.953,20D	0,00C	Lucros Acumulados (1190) 	2.3.03.001.00001
+*****33.953,20D	**********0,00C	=Lucros Acumulados
+(-) Prejuízos Acumulados (1204)
+1.063.608,48D	0,00D	(-) Prejuízos Acumulados (1211) 	2.3.03.002.00001
+**1.063.608,48D	**********0,00D	=(-) Prejuízos Acumulados
+**1.097.561,68D	**********0,00C	=Lucros/Prejuízos Acumulados
+**1.097.561,68D	**********0,00C	=T o t a l - PATRIMÔNIO LÍQUIDO
+******4.245,68C	*****41.388,12C	=PASSIVO A DESCOBERTO

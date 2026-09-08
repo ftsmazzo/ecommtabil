@@ -67,6 +67,20 @@
                         <div class="fw-semibold mt-1">
                             R$ <?=number_format((float) $r->valor_total, 2, ",", ".")?>
                         </div>
+                        <?php if ($slug === "bp" && !empty($bpEquilibrio["ultimo"])) : ?>
+                            <?php $eq = $bpEquilibrio["ultimo"]; ?>
+                            <div class="mt-2">
+                                <?php if (!empty($eq["fecha"])) : ?>
+                                    <span class="badge bg-success-subtle text-success">
+                                        <i class="uil uil-check me-1"></i>Ativo = Passivo + PL
+                                    </span>
+                                <?php else : ?>
+                                    <span class="badge bg-warning-subtle text-warning">
+                                        <i class="uil uil-exclamation-triangle me-1"></i>Equação a revisar
+                                    </span>
+                                <?php endif ?>
+                            </div>
+                        <?php endif ?>
                         <div class="text-muted small mt-2">
                             <a href="<?=$router->route(\App\Models\TipoDemonstrativo::routeName($slug), ["id" => $projeto->id])?>" class="small">
                                 Importar mais →

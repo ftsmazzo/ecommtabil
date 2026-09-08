@@ -1,0 +1,130 @@
+<?php
+/**
+ * Conferência Ativo = Passivo + PL (BP).
+ * @var array<string,mixed>|null $equilibrio
+ * @var bool $compact
+ */
+$equilibrio = $equilibrio ?? null;
+$compact = !empty($compact);
+if (!$equilibrio || empty($equilibrio["tem_dados"])) {
+    return;
+}
+
+$ultimo = $equilibrio["ultimo"] ?? null;
+if (!$ultimo) {
+    return;
+}
+
+$fmt = static function (float $v): string {
+    return "R$ " . number_format($v, 2, ",", ".");
+};
+
+$badgeClass = !empty($ultimo["fecha"]) ? "bg-success" : "text-bg-warning";
+$badgeText = !empty($ultimo["fecha"]) ? "Equação OK" : "Não fecha";
+?>
+
+<div class="card border-<?=!empty($ultimo["fecha"]) ? "success" : "warning"?> mb-4">
+    <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+            <div>
+                <h6 class="fw-semibold mb-1">
+                    <i class="uil uil-balance-scale me-1"></i>Conferência do balanço
+                </h6>
+                <p class="text-muted small mb-0">
+                    Foto do momento: o sistema <strong>recebe</strong> os valores apurados pelo contador
+                    e verifica se <strong>Ativo = Passivo + Patrimônio Líquido</strong>.
+                    Não refaz a apuração contábil.
+                </p>
+            </div>
+            <span class="badge <?=$badgeClass?>"><?=$badgeText?></span>
+        </div>
+
+        <?php if (!empty($ultimo["periodo_label"])) : ?>
+            <div class="text-muted small mb-2">Referência: <strong><?=htmlspecialchars((string) $ultimo["periodo_label"], ENT_QUOTES, "UTF-8")?></strong></div>
+        <?php endif ?>
+
+        <div class="row g-3 mb-3">
+            <div class="col-6 col-md-3">
+                <div class="border rounded p-2 h-100">
+                    <div class="text-muted small">Ativo</div>
+                    <div class="fw-semibold"><?=$fmt((float) ($ultimo["ativo"] ?? 0))?></div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="border rounded p-2 h-100">
+                    <div class="text-muted small">Passivo</div>
+                    <div class="fw-semibold"><?=$fmt((float) ($ultimo["passivo"] ?? 0))?></div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="border rounded p-2 h-100">
+                    <div class="text-muted small">Patrimônio Líquido</div>
+                    <div class="fw-semibold"><?=$fmt((float) ($ultimo["pl"] ?? 0))?></div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="border rounded p-2 h-100 bg-light">
+                    <div class="text-muted small">Passivo + PL</div>
+                    <div class="fw-semibold"><?=$fmt((float) ($ultimo["passivo_mais_pl"] ?? 0))?></div>
+                </div>
+            </div>
+        </div>
+
+        <?php if (!empty($ultimo["usa_totais_declarados"])) : ?>
+            <p class="small text-muted mb-2">
+                Validação feita com totais declarados na planilha (Total do Ativo × Total Passivo + PL).
+            </p>
+        <?php endif ?>
+
+        <?php if (!empty($ultimo["incompleto"])) : ?>
+            <div class="alert alert-warning py-2 small mb-2">
+                Só há contas de Ativo importadas. Inclua Passivo e PL para validar a equação.
+            </div>
+        <?php elseif (empty($ultimo["fecha"])) : ?>
+            <div class="alert alert-warning py-2 small mb-2">
+                Diferença de <?=$fmt(abs((float) ($ultimo["diferenca"] ?? 0)))?> —
+                revise a apuração ou o de-para das contas.
+            </div>
+        <?php else : ?>
+            <div class="alert alert-success py-2 small mb-2 mb-md-0">
+                <?=htmlspecialchars((string) ($equilibrio["mensagem_resumo"] ?? "Equação contábil conferida."), ENT_QUOTES, "UTF-8")?>
+            </div>
+        <?php endif ?>
+
+        <?php if (!$compact && count($equilibrio["periodos"] ?? []) > 1) : ?>
+            <details class="mt-3">
+                <summary class="small fw-semibold">Todos os períodos importados</summary>
+                <div class="table-responsive mt-2">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Período</th>
+                                <th class="text-end">Ativo</th>
+                                <th class="text-end">Passivo + PL</th>
+                                <th class="text-end">Diferença</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($equilibrio["periodos"] as $p) : ?>
+                                <tr>
+                                    <td><?=htmlspecialchars((string) ($p["periodo_label"] ?? ""), ENT_QUOTES, "UTF-8")?></td>
+                                    <td class="text-end"><?=$fmt((float) ($p["ativo"] ?? 0))?></td>
+                                    <td class="text-end"><?=$fmt((float) ($p["passivo_mais_pl"] ?? 0))?></td>
+                                    <td class="text-end"><?=$fmt(abs((float) ($p["diferenca"] ?? 0)))?></td>
+                                    <td>
+                                        <?php if (!empty($p["fecha"])) : ?>
+                                            <span class="badge bg-success-subtle text-success">OK</span>
+                                        <?php else : ?>
+                                            <span class="badge bg-warning-subtle text-warning">Revisar</span>
+                                        <?php endif ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach ?>
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+        <?php endif ?>
+    </div>
+</div>

@@ -23,6 +23,9 @@ class PlanilhaImportacaoService
     /** @var array<int,array{linha:int,conta:string,periodo:?string,valor:float}> */
     private array $amostras = [];
 
+    /** @var array<int,array{conta:string,periodo:?string,valor:float,natureza:string}> */
+    private array $linhasBp = [];
+
     public const DEST_PERIODO   = "__periodo__";
     public const DEST_DESCRICAO = "__descricao__";
     public const DEST_VALOR     = "__valor__";
@@ -739,6 +742,7 @@ class PlanilhaImportacaoService
     ): array {
         $this->gravar   = $gravar;
         $this->amostras = [];
+        $this->linhasBp = [];
 
         $layout = $this->layoutDoMapa($mapa, $idContaPadrao);
         $aberto = $this->abrir($caminho);
@@ -790,7 +794,7 @@ class PlanilhaImportacaoService
                 $avisos[] = $aviso;
             }
 
-            return [
+            $retorno = [
                 "inseridos"           => $inseridos,
                 "linhas_origem"       => $linhasOrigem,
                 "ignorados"           => $ignorados,
@@ -798,6 +802,11 @@ class PlanilhaImportacaoService
                 "amostras"            => $this->amostras,
                 "contas_nao_achadas"  => $nomes,
             ];
+            if (strtolower($tipo) === "bp" && $this->linhasBp !== []) {
+                $retorno["linhas_bp"] = $this->linhasBp;
+            }
+
+            return $retorno;
         };
 
         return $this->gravar ? DB::transaction($executar) : $executar();
@@ -1410,13 +1419,30 @@ class PlanilhaImportacaoService
         string $rotuloConta = "",
         string $origemColuna = ""
     ): void {
+        $nomeConta = $rotuloConta !== "" ? $rotuloConta : $mapeamento;
         if (count($this->amostras) < 25) {
             $this->amostras[] = [
                 "linha"   => $linha,
                 "origem"  => $origemColuna,
-                "conta"   => $rotuloConta !== "" ? $rotuloConta : $mapeamento,
+                "conta"   => $nomeConta,
                 "periodo" => $periodo,
                 "valor"   => $valor,
+            ];
+        }
+
+        if (strtolower($tipo) === "bp") {
+            $natureza = "";
+            static $cacheNatureza = [];
+            if (!isset($cacheNatureza[$idConta])) {
+                $row = DreConta::find($idConta);
+                $cacheNatureza[$idConta] = (string) ($row->natureza ?? "");
+            }
+            $natureza = $cacheNatureza[$idConta];
+            $this->linhasBp[] = [
+                "conta"    => $nomeConta,
+                "periodo"  => $periodo,
+                "valor"    => $valor,
+                "natureza" => $natureza,
             ];
         }
 

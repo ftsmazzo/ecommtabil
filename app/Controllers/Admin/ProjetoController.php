@@ -22,6 +22,7 @@ use App\Services\Importacao\DeParaMapper;
 use App\Services\Importacao\OrigemClassificador;
 use App\Services\Importacao\OrigemPerfilService;
 use App\Services\Importacao\PdfPlanilhaConverter;
+use App\Services\Bp\BpEquilibrioService;
 use App\Services\Importacao\PlanilhaImportacaoService;
 use App\Services\MenuService;
 
@@ -230,6 +231,11 @@ class ProjetoController extends ControllerAdmin
             $resumos[$slug] = ProjetoLancamento::resumoPorProjeto((int) $projeto->id, $slug);
         }
 
+        $bpEquilibrio = null;
+        if ((int) ($resumos["bp"]->total_lancamentos ?? 0) > 0) {
+            $bpEquilibrio = (new BpEquilibrioService())->conferirProjeto((int) $projeto->id);
+        }
+
         $this->view->addData([
             "breadcrumb" => [
                 "Projetos"    => ["url" => $this->router->route("admin.projeto.index"), "current" => false],
@@ -248,8 +254,9 @@ class ProjetoController extends ControllerAdmin
             "csrf"      => $this->csrf->generate(),
             "empresas"  => Empresa::orderBy("razao")->get(),
             "tipos"     => $tipos,
-            "resumos"   => $resumos,
-            "permissao" => [
+            "resumos"      => $resumos,
+            "bpEquilibrio" => $bpEquilibrio,
+            "permissao"    => [
                 "editar"  => $this->auth->allow("projeto_editar"),
                 "excluir" => $this->auth->allow("projeto_excluir"),
             ],
@@ -314,13 +321,19 @@ class ProjetoController extends ControllerAdmin
             "title" => $projetoLabel,
         ]);
 
+        $equilibrio = null;
+        if (strtoupper($tipoFixo) === "BP") {
+            $equilibrio = (new BpEquilibrioService())->conferirProjeto((int) $projeto->id);
+        }
+
         echo $this->view->render("admin/projeto/{$view}", [
-            "projeto"   => $projeto,
-            "aba"       => $aba,
-            "tipo"      => $tipoFixo,
-            "csrf"      => $this->csrf->generate(),
-            "empresas"  => Empresa::orderBy("razao")->get(),
-            "permissao" => [
+            "projeto"    => $projeto,
+            "aba"        => $aba,
+            "tipo"       => $tipoFixo,
+            "equilibrio" => $equilibrio,
+            "csrf"       => $this->csrf->generate(),
+            "empresas"   => Empresa::orderBy("razao")->get(),
+            "permissao"  => [
                 "editar"  => $this->auth->allow("projeto_editar"),
                 "excluir" => $this->auth->allow("projeto_excluir"),
             ],
@@ -470,7 +483,12 @@ class ProjetoController extends ControllerAdmin
         ]);
 
         if ($fontePdf) {
-            $this->message->info("PDF convertido via Mistral OCR. Confira o de-para antes de processar.");
+            $fonte = (string) (($conv["fonte"] ?? "ocr"));
+            if ($fonte === "alterdata") {
+                $this->message->info("PDF ALTERDATA convertido localmente. Confira o de-para antes de processar.");
+            } else {
+                $this->message->info("PDF convertido via Mistral OCR. Confira o de-para antes de processar.");
+            }
         }
 
         $this->router->redirect("admin.projeto.importacao.mapear", ["id" => $projeto->id]);
@@ -879,6 +897,10 @@ class ProjetoController extends ControllerAdmin
             return;
         }
 
+        if (strtoupper((string) $tipo) === "BP") {
+            $this->mensagemEquilibrioBp((int) $projeto->id);
+        }
+
         $this->router->redirect("admin.projeto.abrir", ["id" => $projeto->id]);
     }
 
@@ -929,7 +951,14 @@ class ProjetoController extends ControllerAdmin
                 false,
                 $contaPadrao
             );
-            echo json_encode(["ok" => true] + $resultado, JSON_UNESCAPED_UNICODE);
+            $payload = ["ok" => true] + $resultado;
+            if (strtoupper((string) $tipo) === "BP") {
+                $linhas = $resultado["linhas_bp"] ?? $resultado["amostras"] ?? [];
+                if ($linhas !== []) {
+                    $payload["equilibrio"] = (new BpEquilibrioService())->conferirAmostras($linhas);
+                }
+            }
+            echo json_encode($payload, JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
             echo json_encode(["ok" => false, "error" => $e->getMessage()]);
         }
@@ -1209,6 +1238,23 @@ PROMPT;
             $this->message->warning($aviso);
         }
         return $resultado;
+    }
+
+    private function mensagemEquilibrioBp(int $idProjeto): void
+    {
+        $conf = (new BpEquilibrioService())->conferirProjeto($idProjeto);
+        $msg  = $conf["mensagem_resumo"] ?? null;
+        if (!$msg) {
+            return;
+        }
+
+        $ultimo = $conf["ultimo"] ?? null;
+        if ($ultimo && !empty($ultimo["fecha"])) {
+            $this->message->success($msg);
+            return;
+        }
+
+        $this->message->warning($msg);
     }
 
     private function contaPadraoDoUpload(object $upload): ?int

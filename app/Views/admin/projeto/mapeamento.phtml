@@ -387,6 +387,7 @@ $renderLinhaModelo = function (array $campo) use ($renderSelect, $campos): void 
                 <div id="simular-erro" class="alert alert-danger d-none mb-0"></div>
                 <div id="simular-ok" class="d-none">
                     <p class="mb-2" id="simular-resumo"></p>
+                    <div id="simular-equilibrio"></div>
                     <div id="simular-avisos"></div>
                     <p class="small text-muted mb-3">Uma linha do Excel vira vários <strong>lançamentos</strong> nas contas que já existem no plano. O nome da coluna do cliente não vira conta nova — Mercado Livre, Shopee e planilha interna podem chamar “Receita por produtos”, “Vr. Venda” ou “Ingresos”; no sistema continua <strong>Receita Bruta</strong>.</p>
                     <div class="table-responsive">
@@ -421,6 +422,7 @@ $renderLinhaModelo = function (array $campo) use ($renderSelect, $campos): void 
 <script>
 (function () {
     var abaAtiva = <?=(int) $abaAtiva?>;
+    var tipoUpload = <?=json_encode(strtoupper((string) ($upload->tipo ?? "")))?>;
     var previewUrl = <?=json_encode($router->route("admin.projeto.importacao.mapear.preview", ["id" => $projeto->id]))?>;
     var mapeamentoUrl = <?=json_encode($router->route("admin.projeto.importacao.mapear", ["id" => $projeto->id]))?>;
     var sugerirUrl = <?=json_encode($router->route("admin.projeto.importacao.mapear.sugerir", ["id" => $projeto->id]))?>;
@@ -652,6 +654,26 @@ $renderLinhaModelo = function (array $campo) use ($renderSelect, $campos): void 
 
             var avisos = document.getElementById("simular-avisos");
             avisos.innerHTML = "";
+
+            var eqBox = document.getElementById("simular-equilibrio");
+            eqBox.innerHTML = "";
+            if (tipoUpload === "BP" && data.equilibrio && data.equilibrio.ultimo) {
+                var eq = data.equilibrio.ultimo;
+                var fmt = function (v) {
+                    return Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+                };
+                var alertClass = eq.fecha ? "alert-success" : "alert-warning";
+                var titulo = eq.fecha ? "Equação contábil OK" : "Equação não fecha";
+                var html = "<div class=\"alert " + alertClass + " py-2 small mb-2\">";
+                html += "<strong>" + titulo + ".</strong> ";
+                html += "Ativo " + fmt(eq.ativo) + " × Passivo + PL " + fmt(eq.passivo_mais_pl);
+                if (!eq.fecha && eq.diferenca) {
+                    html += " — diferença " + fmt(Math.abs(eq.diferenca));
+                }
+                html += "</div>";
+                eqBox.innerHTML = html;
+            }
+
             (data.avisos || []).forEach(function (aviso) {
                 var d = document.createElement("div");
                 d.className = "alert alert-warning py-2 small";

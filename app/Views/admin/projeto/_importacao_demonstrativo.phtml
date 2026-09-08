@@ -9,7 +9,7 @@ $compact = !empty($compact);
 $textos = [
     "DRE" => "Marketplace, ERP, planilha interna ou relatório exportado. O sistema classifica pelas colunas, sugere o de-para e ignora o que não entra no modelo.",
     "DFC" => "Planilha com lançamentos por conta ou layout colunar/matriz. Para extrato bancário + comprovantes, use a seção abaixo nesta mesma tela.",
-    "BP"  => "Balancete, BP exportado do contador ou planilha interna. O de-para mapeia colunas do cliente para as contas do plano.",
+    "BP"  => "Balancete ou BP exportado do contador — foto do momento, não fluxo. O sistema recebe os valores apurados e valida se Ativo = Passivo + PL.",
 ];
 $textoOrigem = $textos[$tipo] ?? $textos["DRE"];
 $arquivosTeste = [
@@ -23,6 +23,7 @@ $arquivosTeste = [
     ],
     "BP" => [
         ["arquivo" => "bp-colunar.csv", "label" => "Uma coluna por conta"],
+        ["arquivo" => "bp-alterdata-2024.csv", "label" => "Matriz ALTERDATA (exemplo 2024)"],
     ],
 ];
 $listaTeste = $arquivosTeste[$tipo] ?? $arquivosTeste["DRE"];
@@ -96,6 +97,8 @@ $listaTeste = $arquivosTeste[$tipo] ?? $arquivosTeste["DRE"];
             Contas de teste: <strong>TESTE A</strong> e <strong>TESTE A2</strong>.
         <?php elseif ($tipo === "DFC") : ?>
             Na matriz use ano-base <strong>2024</strong>.
+        <?php elseif ($tipo === "BP") : ?>
+            CSV colunar ou matriz ALTERDATA (exemplo 2024). PDF ALTERDATA também é aceito — leitura local ou OCR.
         <?php endif ?>
     </p>
     <div class="d-flex flex-wrap gap-2">
