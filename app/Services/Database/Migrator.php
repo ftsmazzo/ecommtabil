@@ -36,10 +36,10 @@ class Migrator
         foreach ($arquivos as $file) {
             $nome = basename($file);
             if (isset($aplicados[$nome])) {
-                fwrite(STDOUT, "[migrate] ok (já aplicada) {$nome}\n");
+                $this->log("ok (já aplicada) {$nome}");
                 continue;
             }
-            fwrite(STDOUT, "[migrate] aplicando {$nome}\n");
+            $this->log("aplicando {$nome}");
             $sql = file_get_contents($file);
             if ($sql === false) {
                 throw new RuntimeException("Não foi possível ler {$nome}");
@@ -47,7 +47,7 @@ class Migrator
             $this->executarArquivo($sql);
             $stmt = $this->pdo->prepare("INSERT INTO `schema_migrations` (`filename`) VALUES (?)");
             $stmt->execute([$nome]);
-            fwrite(STDOUT, "[migrate] concluída {$nome}\n");
+            $this->log("concluída {$nome}");
         }
     }
 
@@ -62,7 +62,7 @@ class Migrator
                 continue;
             }
             $this->pdo->exec("TRUNCATE TABLE `{$tabela}`");
-            fwrite(STDOUT, "[migrate] limpou {$tabela}\n");
+            $this->log("limpou {$tabela}");
         }
         $this->pdo->exec("SET FOREIGN_KEY_CHECKS = 1");
     }
@@ -87,8 +87,18 @@ class Migrator
             }
             $stmt = $this->pdo->prepare("INSERT INTO `schema_migrations` (`filename`) VALUES (?)");
             $stmt->execute([$nome]);
-            fwrite(STDOUT, "[migrate] baseline legado {$nome}\n");
+            $this->log("baseline legado {$nome}");
         }
+    }
+
+    private function log(string $msg): void
+    {
+        $line = "[migrate] {$msg}";
+        if (defined("STDOUT") && is_resource(STDOUT)) {
+            fwrite(\STDOUT, $line . "\n");
+            return;
+        }
+        error_log($line);
     }
 
     /**

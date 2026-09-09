@@ -391,11 +391,26 @@ class ProjetoController extends ControllerAdmin
             return;
         }
 
-        (new Migrator(Connection::get(), PATH_ROOT . "/storage/migrations"))->limparTabelasImportacao();
+        $tipo = TipoDemonstrativo::existeSigla($data->tipo ?? "")
+            ? (string) $data->tipo
+            : "";
+
+        $qLanc = DB::table("projeto_lancamento")->where("id_projeto", "=", (int) $projeto->id);
+        $qMap  = DB::table("projeto_mapeamento_coluna")->where("id_projeto", "=", (int) $projeto->id);
+        if ($tipo !== "") {
+            $qLanc->where("tipo_demonstrativo", "=", $tipo);
+            $qMap->where("tipo_demonstrativo", "=", $tipo);
+        }
+        $qLanc->update(["trash" => 1]);
+        $qMap->delete();
+
         $this->session->unset("planilha_upload");
-        $this->message->success("Lançamentos, mapeamentos e perfis de origem de teste foram apagados. Envie o arquivo de novo.");
-        $tipoVolta = trim((string) ($data->tipo ?? ""));
-        $this->redirectDemonstrativo((int) $projeto->id, $tipoVolta !== "" ? $tipoVolta : null);
+        $this->message->success(
+            $tipo !== ""
+                ? "Importações de {$tipo} deste projeto foram apagadas. Envie o arquivo de novo."
+                : "Lançamentos e mapeamentos deste projeto foram apagados. Envie o arquivo de novo."
+        );
+        $this->redirectDemonstrativo((int) $projeto->id, $tipo !== "" ? $tipo : null);
     }
 
     public function uploadPlanilha(Request $request): void
