@@ -420,7 +420,11 @@ $renderLinhaModelo = function (array $campo) use ($renderSelect, $campos): void 
                     <p class="mb-2" id="simular-resumo"></p>
                     <div id="simular-equilibrio"></div>
                     <div id="simular-avisos"></div>
+                    <?php if (($tipo ?? "") === "bp"): ?>
+                    <p class="small text-muted mb-3">Cada conta da planilha vira um lançamento por período. Contas <strong>sem correspondência no plano</strong> aparecem em amarelo e <strong>não entram</strong> — limpe a importação e reenvie, ou confira o plano BP. A coluna “De onde veio” mostra o nome da conta no arquivo.</p>
+                    <?php else: ?>
                     <p class="small text-muted mb-3">Uma linha do Excel vira vários <strong>lançamentos</strong> nas contas que já existem no plano. O nome da coluna do cliente não vira conta nova — Mercado Livre, Shopee e planilha interna podem chamar “Receita por produtos”, “Vr. Venda” ou “Ingresos”; no sistema continua <strong>Receita Bruta</strong>.</p>
+                    <?php endif; ?>
                     <div class="table-responsive">
                         <table class="table table-sm mb-0">
                             <thead class="table-light">
@@ -719,12 +723,13 @@ $renderLinhaModelo = function (array $campo) use ($renderSelect, $campos): void 
                 var valorNum = Number(a.valor || 0);
                 var valor = valorNum.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                 if (valorNum < 0) tr.classList.add("text-danger");
+                if (a.erro) tr.classList.add("table-warning");
                 tr.innerHTML = "<td></td><td></td><td></td><td></td><td class=\"text-end\"></td>";
                 tr.cells[0].textContent = a.linha;
                 tr.cells[1].textContent = a.origem || "—";
                 tr.cells[2].textContent = a.conta || "";
                 tr.cells[3].textContent = a.periodo || "—";
-                tr.cells[4].textContent = valor;
+                tr.cells[4].textContent = a.erro ? "—" : valor;
                 tb.appendChild(tr);
             });
             document.getElementById("simular-ok").classList.remove("d-none");

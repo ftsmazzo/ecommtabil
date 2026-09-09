@@ -224,6 +224,30 @@ class DreConta extends Model
             return $parciais[0];
         }
 
+        // "Caixa" → "Caixa e Equivalentes de Caixa" (nome do plano começa com o texto curto)
+        if (strlen($nTexto) >= 3) {
+            $prefixos = [];
+            foreach ($contas as $conta) {
+                $nn = $norm((string) ($conta->nome ?? ""));
+                if ($nn === "" || strlen($nn) < strlen($nTexto)) {
+                    continue;
+                }
+                if ($nn === $nTexto || str_starts_with($nn, $nTexto)) {
+                    $prefixos[] = $conta;
+                }
+            }
+            if (count($prefixos) === 1) {
+                return $prefixos[0];
+            }
+            if (count($prefixos) > 1) {
+                usort($prefixos, static function ($a, $b) use ($norm) {
+                    return strlen($norm((string) ($b->nome ?? ""))) <=> strlen($norm((string) ($a->nome ?? "")));
+                });
+                // Se o mais longo contém os demais como prefixo, fica com o mais específico
+                return $prefixos[0];
+            }
+        }
+
         return null;
     }
 
@@ -279,6 +303,7 @@ class DreConta extends Model
                 ["Saldo Final de Caixa", "aumenta"],
             ],
             "bp" => [
+                ["Caixa", "aumenta"],
                 ["Caixa e Equivalentes de Caixa", "aumenta"],
                 ["Caixa e Equivalentes", "aumenta"],
                 ["Contas a Receber (Clientes)", "aumenta"],

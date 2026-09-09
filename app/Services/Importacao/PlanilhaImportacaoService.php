@@ -369,9 +369,10 @@ class PlanilhaImportacaoService
             $header = trim((string) ($headers[$col] ?? "Col " . ($col + 1)));
             $parsed = $this->parsePeriodo($header, $header, $anoBase);
             if ($parsed) {
-                $destino = self::DEST_MATRIZ . ":" . substr($parsed, 0, 7);
+                // Guarda data completa (BP ALTERDATA: 31/12/2024 → 2024-12-31)
+                $destino = self::DEST_MATRIZ . ":" . $parsed;
             } elseif ($anoBase && $anoBase >= 1990 && $anoBase <= 2100) {
-                $destino = self::DEST_MATRIZ . ":" . str_pad((string) ($anoBase + $offset), 4, "0", STR_PAD_LEFT) . "-01";
+                $destino = self::DEST_MATRIZ . ":" . str_pad((string) ($anoBase + $offset), 4, "0", STR_PAD_LEFT) . "-01-01";
                 $offset++;
             } else {
                 $destino = self::DEST_MATRIZ;
@@ -1217,6 +1218,16 @@ class PlanilhaImportacaoService
             if (!$conta) {
                 $naoAcharam[$nomeConta] = true;
                 $ignorados++;
+                if (count($this->amostras) < 25) {
+                    $this->amostras[] = [
+                        "linha"   => $r,
+                        "origem"  => $nomeConta,
+                        "conta"   => "⚠ sem match no plano",
+                        "periodo" => null,
+                        "valor"   => 0,
+                        "erro"    => true,
+                    ];
+                }
                 continue;
             }
 
@@ -1229,6 +1240,7 @@ class PlanilhaImportacaoService
                 }
                 $cabecalho = (string) ($headers[$colIdx] ?? "");
                 $periodo   = $this->periodoDoDestinoMatriz($destino, $cabecalho);
+                $origem    = $nomeConta . ($cabecalho !== "" ? " · " . $cabecalho : "");
                 $this->gravarLancamento(
                     $idProjeto,
                     $tipo,
@@ -1241,7 +1253,8 @@ class PlanilhaImportacaoService
                     $r,
                     $destino,
                     $idUsuario,
-                    $rotulo
+                    $rotulo,
+                    $origem
                 );
                 $inseridos++;
                 $criou = true;
@@ -1366,7 +1379,14 @@ class PlanilhaImportacaoService
 
     private function periodoDoDestinoMatriz(string $destino, string $header): ?string
     {
+        if (preg_match('/^__matriz__:(\d{4}-\d{2}-\d{2})$/', $destino, $m)) {
+            return $m[1];
+        }
         if (preg_match('/^__matriz__:(\d{4}-\d{2})(?:-\d{2})?$/', $destino, $m)) {
+            $doHeader = $this->parsePeriodo($header, $header);
+            if ($doHeader !== null) {
+                return $doHeader;
+            }
             return $m[1] . "-01";
         }
         return $this->parsePeriodo($header, $header);
