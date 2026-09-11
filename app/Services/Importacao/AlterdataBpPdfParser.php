@@ -15,7 +15,10 @@ class AlterdataBpPdfParser
      */
     public function paraCsv(string $pdfPath, string $nomeOriginal = ""): array
     {
-        $texto = (new PdfTextExtractor())->extract($pdfPath, $nomeOriginal !== "" ? $nomeOriginal : basename($pdfPath));
+        $nome = $nomeOriginal !== "" ? $nomeOriginal : basename($pdfPath);
+        $extractor = new PdfTextExtractor();
+        // Texto nativo primeiro — OCR costuma colar/embaralhar valores D/C do ALTERDATA
+        $texto = $extractor->extractPreferindoLocal($pdfPath, $nome);
         if ($texto === "") {
             return ["ok" => false, "error" => "PDF sem texto legível."];
         }
@@ -41,7 +44,7 @@ class AlterdataBpPdfParser
         if ($this->nomeSugereAlterdata($nome)) {
             return true;
         }
-        $texto = (new PdfTextExtractor())->extract($pdfPath, $nome);
+        $texto = (new PdfTextExtractor())->extractPreferindoLocal($pdfPath, $nome);
 
         return $this->pareceAlterdata($texto, $nome);
     }

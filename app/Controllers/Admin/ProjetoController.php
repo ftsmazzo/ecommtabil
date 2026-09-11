@@ -624,7 +624,14 @@ class ProjetoController extends ControllerAdmin
                     || isset($expTmp["campos"][PlanilhaImportacaoService::DEST_CONTA]);
                 if (!$temMatrizSalva) {
                     $mapaSalvo = [];
+                } elseif (!$svc->mapaMatrizCompativelComCabecalhos($mapaSalvo, $headers)) {
+                    // Períodos antigos (ex.: 2023) vs arquivo novo (31/12/2025) → regenera
+                    $mapaSalvo = [];
                 }
+            }
+            // PDF BP novo: sempre sugerir de-para fresco (Conta × exercício atual/anterior)
+            if ($mapaSalvo && !empty($upload->fonte_pdf) && $tipoUploadUpper === "BP") {
+                $mapaSalvo = [];
             }
             if ($mapaSalvo) {
                 $expandido = $svc->expandirMapa($mapaSalvo);
@@ -938,6 +945,8 @@ class ProjetoController extends ControllerAdmin
             return;
         }
 
+        $mapa = $this->realinharMapaComArquivo($svc, $caminho, $aba, $mapa);
+
         $validado = $svc->validar($mapa, $svc->layoutDoMapa($mapa, $contaPadrao), $contaPadrao);
         if (!$validado["ok"]) {
             $this->message->warning($validado["erro"] ?? "Mapeamento incompleto.");
@@ -994,6 +1003,8 @@ class ProjetoController extends ControllerAdmin
             echo json_encode(["ok" => false, "error" => "Salve o mapeamento antes de conferir."]);
             return;
         }
+
+        $mapa = $this->realinharMapaComArquivo($svc, $caminho, $aba, $mapa);
 
         $validado = $svc->validar($mapa, $svc->layoutDoMapa($mapa, $contaPadrao), $contaPadrao);
         if (!$validado["ok"]) {
@@ -1322,6 +1333,32 @@ PROMPT;
     {
         $id = (int) ($upload->conta_padrao ?? 0);
         return $id > 0 ? $id : null;
+    }
+
+    /**
+     * @param array<int,string> $mapa
+     * @return array<int,string>
+     */
+    private function realinharMapaComArquivo(
+        PlanilhaImportacaoService $svc,
+        string $caminho,
+        int $aba,
+        array $mapa
+    ): array {
+        try {
+            $aberto = $svc->abrir($caminho);
+            $sheet  = $aberto["spreadsheet"]->getSheet($aba);
+            $lido   = $svc->lerCabecalhos($sheet, 3);
+            $lido   = $svc->completarMatrizSemMeses(
+                $sheet,
+                (string) ($aberto["sheetNames"][$aba] ?? ""),
+                $lido
+            );
+            return $svc->realinharMapaMatrizComCabecalhos($mapa, $lido["headers"] ?? []);
+        } catch (\Throwable $e) {
+            error_log("[importacao.realinhar] " . $e->getMessage());
+            return $mapa;
+        }
     }
 
     private function atualizarUploadSessao(object $upload, array $extra): void

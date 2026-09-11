@@ -5,8 +5,9 @@ namespace App\Services\Caixa;
 use App\Lib\OpenRouter;
 
 /**
- * Extrai texto de PDFs. Base: OpenRouter + Mistral OCR.
- * Local (smalot) só se a chave OpenRouter não estiver configurada.
+ * Extrai texto de PDFs.
+ * ALTERDATA/nativo: tenta parser local primeiro (OCR bagunça D/C colados).
+ * Demais: OpenRouter (Mistral OCR) com fallback local.
  */
 class PdfTextExtractor
 {
@@ -32,6 +33,38 @@ class PdfTextExtractor
         }
 
         return $this->extrairLocal($path);
+    }
+
+    /**
+     * Preferir texto embutido do PDF (smalot/fallback) antes do OCR.
+     */
+    public function extractPreferindoLocal(string $path, string $nomeOriginal = ""): string
+    {
+        if (!is_readable($path)) {
+            return "";
+        }
+
+        $local = $this->extrairLocal($path);
+        if ($local !== "" && $this->pareceTextoDemonstrativo($local)) {
+            return $local;
+        }
+
+        $remoto = $this->extract($path, $nomeOriginal);
+        if ($remoto !== "") {
+            return $remoto;
+        }
+
+        return $local;
+    }
+
+    private function pareceTextoDemonstrativo(string $texto): bool
+    {
+        if (mb_strlen($texto) < 80) {
+            return false;
+        }
+
+        return (bool) preg_match('/Balan[cç]?o\s+Patrimonial|Encerrado\s+em|Exerc[ií]cio\s+Atual|D\.?R\.?E|Demonstra/iu', $texto)
+            || (bool) preg_match('/\d{1,3}(?:\.\d{3})*,\d{2}\s*[DC]/iu', $texto);
     }
 
     private function extrairLocal(string $path): string

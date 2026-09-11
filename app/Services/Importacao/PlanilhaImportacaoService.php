@@ -461,6 +461,75 @@ class PlanilhaImportacaoService
     }
 
     /**
+     * True se os períodos salvos batem com as datas dos cabeçalhos atuais.
+     *
+     * @param array<int,string> $mapa
+     * @param array<int,string> $headers
+     */
+    public function mapaMatrizCompativelComCabecalhos(array $mapa, array $headers): bool
+    {
+        $anosHeader = [];
+        foreach ($headers as $h) {
+            $parsed = $this->parsePeriodo((string) $h, (string) $h);
+            if ($parsed && preg_match('/^(\d{4})/', $parsed, $m)) {
+                $anosHeader[] = (int) $m[1];
+            }
+        }
+        $anosHeader = array_values(array_unique($anosHeader));
+        if ($anosHeader === []) {
+            return true;
+        }
+
+        $anosMapa = [];
+        foreach ($mapa as $destino) {
+            $destino = (string) $destino;
+            if (preg_match('/^__matriz__:(\d{4})/', $destino, $m)) {
+                $anosMapa[] = (int) $m[1];
+            }
+        }
+        $anosMapa = array_values(array_unique($anosMapa));
+        if ($anosMapa === []) {
+            return true;
+        }
+
+        sort($anosHeader);
+        sort($anosMapa);
+
+        return $anosHeader === $anosMapa || max($anosHeader) === max($anosMapa);
+    }
+
+    /**
+     * Regrava destinos __matriz__:data a partir dos cabeçalhos do arquivo atual.
+     *
+     * @param array<int,string> $mapa
+     * @param array<int,string> $headers
+     * @return array<int,string>
+     */
+    public function realinharMapaMatrizComCabecalhos(array $mapa, array $headers): array
+    {
+        $colsPeriodo = [];
+        foreach ($mapa as $indice => $destino) {
+            if (self::ehDestinoMatriz((string) $destino)) {
+                $colsPeriodo[] = (int) $indice;
+            }
+        }
+        if ($colsPeriodo === []) {
+            return $mapa;
+        }
+
+        $anoAtual = $this->resolverAnoExercicioAtual($headers, $colsPeriodo, null);
+        foreach ($colsPeriodo as $col) {
+            $header = trim((string) ($headers[$col] ?? ""));
+            $parsed = $this->parsePeriodo($header, $header, $anoAtual);
+            if ($parsed) {
+                $mapa[$col] = self::DEST_MATRIZ . ":" . $parsed;
+            }
+        }
+
+        return $mapa;
+    }
+
+    /**
      * Sugestão automática sem IA, a partir dos cabeçalhos.
      *
      * @param array<int,string> $headers
