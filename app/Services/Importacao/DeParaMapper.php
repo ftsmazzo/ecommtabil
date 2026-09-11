@@ -613,12 +613,36 @@ class DeParaMapper
             ["cargoporserviciodeventa", "Tarifa de venda e impostos"],
             ["ingresosporproducto", "Receita Bruta"],
             ["receitaporproduto", "Receita Bruta"],
+            // BP / ALTERDATA (Senzi e similares)
+            ["bancodobrasil", "Caixa e Equivalentes de Caixa"],
+            ["mercadopago", "Caixa e Equivalentes de Caixa"],
+            ["contamovimento", "Caixa e Equivalentes de Caixa"],
+            ["duplicatasareceber", "Contas a Receber (Clientes)"],
+            ["arecuperar", "Impostos a Recuperar"],
+            ["difalicms", "ICMS a Recolher"],
+            ["decimoterceiro", "Salários e Encargos a Pagar"],
+            ["feriasapagar", "Salários e Encargos a Pagar"],
+            ["salariosapagar", "Salários e Encargos a Pagar"],
+            ["fgtsarecolher", "Salários e Encargos a Pagar"],
+            ["inssarecolher", "Salários e Encargos a Pagar"],
+            ["previdenciasocial", "Salários e Encargos a Pagar"],
+            ["provisaofgts", "Salários e Encargos a Pagar"],
+            ["provisaoinss", "Salários e Encargos a Pagar"],
+            ["capitalsocialsubscrito", "Capital Social"],
+            ["capitalsubscrito", "Capital Social"],
         ];
         foreach ($regras as [$frag, $conta]) {
             $frag = $this->normalizar($frag);
             if ($frag !== "" && str_contains($n, $frag)) {
                 return $conta;
             }
+        }
+        // Bancos / instituições financeiras → Caixa (nome começa com "banco")
+        if (str_starts_with($n, "banco") || str_starts_with($n, "bancos")) {
+            return "Caixa e Equivalentes de Caixa";
+        }
+        if ($n === "mercadoria" || $n === "mercadorias" || str_starts_with($n, "estoque")) {
+            return "Estoques";
         }
         return null;
     }
@@ -762,17 +786,32 @@ class DeParaMapper
             "caixaeequivalentesdecaixa" => "Caixa e Equivalentes de Caixa",
             "caixa"                     => "Caixa e Equivalentes de Caixa",
             "bancos"                    => "Caixa e Equivalentes de Caixa",
+            "bancoscontamovimento"      => "Caixa e Equivalentes de Caixa",
+            "bancocontamovimento"       => "Caixa e Equivalentes de Caixa",
+            "bancodobrasil"             => "Caixa e Equivalentes de Caixa",
+            "bancodobrasilsa"           => "Caixa e Equivalentes de Caixa",
+            "mercadopago"               => "Caixa e Equivalentes de Caixa",
             "caixabancos"               => "Caixa e Equivalentes de Caixa",
             "disponibilidades"          => "Caixa e Equivalentes de Caixa",
             "cofinsarecolher"           => "COFINS a Recolher",
             "icmsarecolher"             => "ICMS a Recolher",
+            "difalicms"                 => "ICMS a Recolher",
+            "difal"                     => "ICMS a Recolher",
             "tributosfederais"          => "Tributos Federais",
             "prejuizosacumulados"       => "(-) Prejuízos Acumulados",
             "prejuizoacumulado"         => "(-) Prejuízos Acumulados",
             "contasareceber"            => "Contas a Receber",
             "contasareceberclientes"    => "Contas a Receber (Clientes)",
+            "duplicatasareceber"        => "Contas a Receber (Clientes)",
+            "clientes"                  => "Contas a Receber (Clientes)",
             "estoques"                  => "Estoques",
+            "estoque"                   => "Estoques",
+            "mercadoria"                => "Estoques",
+            "mercadorias"               => "Estoques",
             "impostosarecuperar"        => "Impostos a Recuperar",
+            "icmsarecuperar"            => "Impostos a Recuperar",
+            "cofinsarecuperar"          => "Impostos a Recuperar",
+            "pisarecuperar"             => "Impostos a Recuperar",
             "imobilizadobruto"          => "Imobilizado (Bruto)",
             "depreciacaoacumulada"      => "Depreciação Acumulada",
             "fornecedoresapagar"        => "Fornecedores a Pagar",
@@ -781,9 +820,24 @@ class DeParaMapper
             "emprestimoscp"             => "Empréstimos CP",
             "impostosarecolher"         => "Impostos a Recolher",
             "salarioseencargosapagar"   => "Salários e Encargos a Pagar",
+            "salariosapagar"            => "Salários e Encargos a Pagar",
+            "decimoterceirosalarioapagar" => "Salários e Encargos a Pagar",
+            "decimoterceirosalario"     => "Salários e Encargos a Pagar",
+            "feriasapagar"              => "Salários e Encargos a Pagar",
+            "fgtsarecolher"             => "Salários e Encargos a Pagar",
+            "inssarecolherdesegurados"  => "Salários e Encargos a Pagar",
+            "inssarecolher"             => "Salários e Encargos a Pagar",
+            "previdenciasocialarecolher" => "Salários e Encargos a Pagar",
+            "provisaofgts13salario"     => "Salários e Encargos a Pagar",
+            "provisaoinss13salario"     => "Salários e Encargos a Pagar",
+            "provisaoinssferias"        => "Salários e Encargos a Pagar",
+            "acionistasadiministradoresdiretores" => "Salários e Encargos a Pagar",
+            "acionistasadministradoresdiretores" => "Salários e Encargos a Pagar",
             "emprestimosefinanciamentosnaocirculante" => "Empréstimos e Financiamentos (Não Circulante)",
             "emprestimoslp"             => "Empréstimos LP",
             "capitalsocial"             => "Capital Social",
+            "capitalsocialsubscrito"    => "Capital Social",
+            "capitalsubscrito"          => "Capital Social",
             "lucrosacumulados"          => "Lucros Acumulados",
             "patrimonioliquido"         => "Patrimônio Líquido",
             "ingresosporproducto"       => "Receita Bruta",

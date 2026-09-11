@@ -78,7 +78,8 @@ class AlterdataBpPdfParser
         $n = $this->normalizar($nome);
 
         return str_contains($n, "alterdata")
-            || (str_contains($n, "balanco") && str_contains($n, "202"));
+            || str_contains($n, "balanco")
+            || str_contains($n, "balancopatrimonial");
     }
 
     /**
@@ -184,9 +185,10 @@ class AlterdataBpPdfParser
      */
     private function parseLinha(string $linha): ?array
     {
-        // Padrão nativo: 4.245,68D  0,00D  Caixa (35)  1.1.01.001.00001
+        // Senzi/ALTERDATA: "18.231,36D0,00D Banco..." (sem espaço entre atual e anterior)
+        // Padrão com espaço: "4.245,68D  0,00D  Caixa (35)  1.1.01.001.00001"
         if (preg_match(
-            '/^(?<atual>[\d.*]+,\d{2}\s*[DC])\s+(?<anterior>[\d.*]+,\d{2}\s*[DC])\s+(?<resto>.+)$/iu',
+            '/^(?<atual>[\d.*]+,\d{2}\s*[DC])\s*(?<anterior>[\d.*]+,\d{2}\s*[DC])\s+(?<resto>.+)$/iu',
             $linha,
             $m
         )) {
@@ -195,7 +197,7 @@ class AlterdataBpPdfParser
 
         // OCR às vezes inverte: Nome ... código ... 4.245,68 D  0,00 D
         if (preg_match(
-            '/^(?<resto>.+?)\s+(?<atual>[\d.*]+,\d{2}\s*[DC])\s+(?<anterior>[\d.*]+,\d{2}\s*[DC])\s*$/iu',
+            '/^(?<resto>.+?)\s+(?<atual>[\d.*]+,\d{2}\s*[DC])\s*(?<anterior>[\d.*]+,\d{2}\s*[DC])\s*$/iu',
             $linha,
             $m
         )) {

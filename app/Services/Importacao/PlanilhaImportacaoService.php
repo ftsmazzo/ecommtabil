@@ -362,17 +362,21 @@ class PlanilhaImportacaoService
         sort($ord);
         $offset = 0;
 
+        // Resolve "Exercício Atual/Anterior" usando datas já presentes nos headers ou anoBase.
+        $anoAtualRef = $this->resolverAnoExercicioAtual($headers, $ord, $anoBase);
+
         foreach ($ord as $col) {
             if ($col < 0 || isset($usados[$col])) {
                 continue;
             }
             $header = trim((string) ($headers[$col] ?? "Col " . ($col + 1)));
-            $parsed = $this->parsePeriodo($header, $header, $anoBase);
+            $parsed = $this->parsePeriodo($header, $header, $anoAtualRef);
             if ($parsed) {
                 // Guarda data completa (BP ALTERDATA: 31/12/2024 → 2024-12-31)
                 $destino = self::DEST_MATRIZ . ":" . $parsed;
-            } elseif ($anoBase && $anoBase >= 1990 && $anoBase <= 2100) {
-                $destino = self::DEST_MATRIZ . ":" . str_pad((string) ($anoBase + $offset), 4, "0", STR_PAD_LEFT) . "-01-01";
+            } elseif ($anoAtualRef && $anoAtualRef >= 1990 && $anoAtualRef <= 2100) {
+                // Fallback raro: colunas de valor sem rótulo reconhecível
+                $destino = self::DEST_MATRIZ . ":" . str_pad((string) ($anoAtualRef - $offset), 4, "0", STR_PAD_LEFT) . "-12-31";
                 $offset++;
             } else {
                 $destino = self::DEST_MATRIZ;
@@ -387,6 +391,39 @@ class PlanilhaImportacaoService
         }
 
         return $linhas;
+    }
+
+    /**
+     * Ano do exercício atual: maior ano nos headers de período, senão anoBase, senão ano civil.
+     *
+     * @param array<int,string> $headers
+     * @param array<int,int>    $colsPeriodo
+     */
+    private function resolverAnoExercicioAtual(array $headers, array $colsPeriodo, ?int $anoBase): ?int
+    {
+        $anos = [];
+        foreach ($colsPeriodo as $col) {
+            $header = trim((string) ($headers[(int) $col] ?? ""));
+            if ($header === "") {
+                continue;
+            }
+            $n = $this->normalizar($header);
+            if (str_contains($n, "exercicioatual") || str_contains($n, "exercicioanterior")) {
+                continue;
+            }
+            $parsed = $this->parsePeriodo($header, $header, $anoBase);
+            if ($parsed && preg_match('/^(\d{4})/', $parsed, $m)) {
+                $anos[] = (int) $m[1];
+            }
+        }
+        if ($anos !== []) {
+            return max($anos);
+        }
+        if ($anoBase && $anoBase >= 1990 && $anoBase <= 2100) {
+            return $anoBase;
+        }
+
+        return (int) date("Y");
     }
 
     /**
@@ -419,7 +456,7 @@ class PlanilhaImportacaoService
         return [
             "campos"          => $campos,
             "periodos_matriz" => $periodos,
-            "ano_base"        => $anos ? min($anos) : null,
+            "ano_base"        => $anos ? max($anos) : null,
         ];
     }
 
@@ -965,6 +1002,17 @@ class PlanilhaImportacaoService
             }
         }
 
+        // BP ALTERDATA: "Exercício Atual" / "Exercício Anterior"
+        $n = $this->normalizar($raw);
+        if (str_contains($n, "exercicioatual") || $n === "atual" || str_contains($n, "periodoatual")) {
+            $ano = $anoBase && $anoBase >= 1990 ? $anoBase : (int) date("Y");
+            return sprintf("%04d-12-31", $ano);
+        }
+        if (str_contains($n, "exercicioanterior") || $n === "anterior" || str_contains($n, "periodoanterior")) {
+            $ano = $anoBase && $anoBase >= 1990 ? $anoBase : (int) date("Y");
+            return sprintf("%04d-12-31", $ano - 1);
+        }
+
         return null;
     }
 
@@ -1238,8 +1286,13 @@ class PlanilhaImportacaoService
                 if ($valor === null) {
                     continue;
                 }
+                // BP: exercício anterior zerado (Senzi) não polui o balanço
+                if (strtolower($tipo) === "bp" && abs($valor) < 0.00001) {
+                    continue;
+                }
                 $cabecalho = (string) ($headers[$colIdx] ?? "");
                 $periodo   = $this->periodoDoDestinoMatriz($destino, $cabecalho);
+                // Preferir exercício atual na conferência: se o cabeçalho for "anterior", ainda importa com a data correta
                 $origem    = $nomeConta . ($cabecalho !== "" ? " · " . $cabecalho : "");
                 $this->gravarLancamento(
                     $idProjeto,
@@ -1379,17 +1432,21 @@ class PlanilhaImportacaoService
 
     private function periodoDoDestinoMatriz(string $destino, string $header): ?string
     {
+        $doHeader = $this->parsePeriodo($header, $header);
+        // Cabeçalho do arquivo manda: evita mapa antigo colado na coluna errada
+        // (ex.: origem "31/12/2024" com destino __matriz__:2023-12-31).
+        if ($doHeader !== null) {
+            return $doHeader;
+        }
+
         if (preg_match('/^__matriz__:(\d{4}-\d{2}-\d{2})$/', $destino, $m)) {
             return $m[1];
         }
         if (preg_match('/^__matriz__:(\d{4}-\d{2})(?:-\d{2})?$/', $destino, $m)) {
-            $doHeader = $this->parsePeriodo($header, $header);
-            if ($doHeader !== null) {
-                return $doHeader;
-            }
             return $m[1] . "-01";
         }
-        return $this->parsePeriodo($header, $header);
+
+        return null;
     }
 
     private function periodoDaLinha(array $linha, ?int $colPeriodo, array $headers, array $mapa): ?string

@@ -103,7 +103,23 @@ class BpEquilibrioService
             $periodos[$periodo] = $this->conferirLinhas($linhas, $periodo);
         }
 
-        $ultimo = end($periodos) ?: null;
+        // Exercício atual = maior data (não a ordem de inserção das amostras)
+        $chaves = array_keys($periodos);
+        usort($chaves, static function (string $a, string $b): int {
+            if ($a === "_sem_periodo") {
+                return -1;
+            }
+            if ($b === "_sem_periodo") {
+                return 1;
+            }
+            return strcmp($a, $b);
+        });
+        $ordenado = [];
+        foreach ($chaves as $k) {
+            $ordenado[$k] = $periodos[$k];
+        }
+        $periodos = $ordenado;
+        $ultimo = $periodos !== [] ? $periodos[array_key_last($periodos)] : null;
         $mensagem = $this->mensagemResumo($ultimo);
 
         return [
