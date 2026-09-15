@@ -43,6 +43,9 @@ Thumbs.db
 
 docker-compose.override.yml
 
+# Clone local do produto Saga (repo separado) — não versionar aninhado
+/Saga/
+
 # Amostras locais de planilha (não versionar binários grandes)
 /modelos/Entradas/*.xlsx
 /modelos/Entradas/*.xls
